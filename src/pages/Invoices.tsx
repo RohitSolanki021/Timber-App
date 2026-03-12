@@ -46,7 +46,7 @@ export default function Invoices() {
   return (
     <div className="p-6 space-y-6">
       <header className="space-y-4">
-        <h1 className="text-2xl font-black text-slate-900 uppercase tracking-widest">My Invoices</h1>
+        <h1 className="text-2xl font-black text-slate-900 uppercase tracking-widest">Invoice Management</h1>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input

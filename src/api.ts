@@ -159,7 +159,7 @@ export const api = {
         quantity,
         name: product.name,
         price: product.price,
-        priceUnit: product.priceUnit
+        unit: product.priceUnit || "ea"
       });
     }
     return { success: true };

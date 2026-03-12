@@ -107,3 +107,16 @@ export interface PaginatedList<T> {
   data: T[];
   pagination: Pagination | null;
 }
+
+
+export interface Customer {
+  id: number;
+  name: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  outstandingBalance?: number | string;
+  pricing_type?: number;
+  status?: string;
+  approval_status?: string;
+}

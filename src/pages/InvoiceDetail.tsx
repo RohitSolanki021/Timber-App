@@ -11,6 +11,7 @@ export default function InvoiceDetail() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -27,6 +28,22 @@ export default function InvoiceDetail() {
     };
     fetchData();
   }, [id]);
+
+
+  const handleMarkPaid = async () => {
+    if (!invoice || invoice.status.toLowerCase() === "paid") return;
+    setMarkingPaid(true);
+    try {
+      await apiProxy.markInvoicePaid(invoice.id);
+      const refreshed = await apiProxy.getInvoice(invoice.id);
+      setInvoice(refreshed);
+    } catch (error) {
+      console.error(error);
+      alert("Unable to mark invoice paid.");
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading Invoice...</div>;
   if (!invoice || !order) return <div className="p-8 text-center text-slate-500">Invoice not found</div>;
@@ -160,7 +177,13 @@ export default function InvoiceDetail() {
           </div>
         </div>
 
-        {/* Removed Share Invoice button from bottom */}
+        <button
+          onClick={handleMarkPaid}
+          disabled={markingPaid || invoice.status.toLowerCase() === "paid"}
+          className="w-full py-4 bg-primary text-white font-black rounded-2xl uppercase tracking-widest text-xs disabled:opacity-40"
+        >
+          {invoice.status.toLowerCase() === "paid" ? "Invoice already paid" : markingPaid ? "Marking as paid..." : "Mark invoice paid"}
+        </button>
       </div>
     </div>
   );

@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiProxy } from "../apiProxy";
 import { LogIn } from "lucide-react";
 import { motion } from "motion/react";
-import { isApproved, isProfileComplete, notifyApproval } from "../utils/accessControl";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,29 +18,12 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await apiProxy.login({ email, password, app_role: "Customer" });
-      // Fetch profile after login
-      try {
-        const profile = await apiProxy.getMe();
-        localStorage.setItem("profile", JSON.stringify(profile));
-
-        if (!isApproved(profile)) {
-          navigate("/awaiting-approval");
-          return;
-        }
-
-        await notifyApproval(profile);
-
-        if (!isProfileComplete(profile)) {
-          navigate("/profile?complete=1");
-          return;
-        }
-      } catch (err) {
-        // Profile fetch failed, continue
-      }
+      await apiProxy.login({ email, password, app_role: "Admin / Owner" });
+      const profile = await apiProxy.getMe();
+      localStorage.setItem("profile", JSON.stringify(profile));
       navigate("/dashboard");
     } catch (err) {
-      setError("Login failed. Please check your credentials.");
+      setError("Login failed. Please check your admin credentials.");
     } finally {
       setLoading(false);
     }
@@ -59,7 +41,7 @@ export default function Login() {
             <img src="/plylam.png" alt="Plylam" className="w-10 h-10 object-contain" />
           </div>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-widest">Natural Plylam</h1>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Customer Portal Login</p>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Admin Portal Login</p>
         </div>
 
 
