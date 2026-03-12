@@ -1,7 +1,7 @@
 // API service for Timber & Plywood mobile app
 // Handles authentication, products, cart, orders, invoices, profile
 
-import { Invoice, Order, PaginatedList } from "./types";
+import { Customer, Invoice, Order, PaginatedList } from "./types";
 
 const DEFAULT_API_BASE_URL = 'http://localhost/natural/api';
 const API_BASE = (() => {
@@ -182,6 +182,33 @@ export const apiService = {
     return request(`${API_BASE}/customers.php?action=create_sub_user`, {
       method: 'POST',
       body: JSON.stringify(data)
+    });
+  },
+
+  // Admin - customers
+  async getCustomers(params: Record<string, any> = {}) {
+    const query = new URLSearchParams(params).toString();
+    const res = await request(`${API_BASE}/customers.php${query ? '?' + query : ''}`);
+    return normalizeListResponse<Customer>(res);
+  },
+  async approveCustomer(customer_id: number) {
+    return request(`${API_BASE}/customers.php?action=approve_customer`, {
+      method: 'POST',
+      body: JSON.stringify({ customer_id })
+    });
+  },
+
+  // Admin - workflow actions
+  async markInvoicePaid(invoice_id: string) {
+    return request(`${API_BASE}/invoices.php?action=mark_paid`, {
+      method: 'POST',
+      body: JSON.stringify({ invoice_id })
+    });
+  },
+  async updateOrderStatus(order_id: string, status: string) {
+    return request(`${API_BASE}/orders.php?action=update_status`, {
+      method: 'POST',
+      body: JSON.stringify({ order_id, status })
     });
   },
 

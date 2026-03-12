@@ -4,15 +4,13 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
-import Cart from "./pages/Cart";
-import Checkout from "./pages/Checkout";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 import Invoices from "./pages/Invoices";
+import Customers from "./pages/Customers";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
 import Welcome from "./pages/Welcome";
 import AwaitingApproval from "./pages/AwaitingApproval";
 import { CartProvider } from "./context/CartContext";
@@ -35,8 +33,13 @@ const PrivateRoute = ({
   const profile = raw ? JSON.parse(raw) : null;
 
   if (profile) {
-    if (!allowPending && !isApproved(profile)) return <Navigate to="/awaiting-approval" />;
-    if (!allowIncompleteProfile && isApproved(profile) && !isProfileComplete(profile)) {
+    const role = String(profile.role || "").toLowerCase();
+    const enforceCustomerChecks = ["customer", "sub-user"].includes(role);
+
+    if (enforceCustomerChecks && !allowPending && !isApproved(profile)) {
+      return <Navigate to="/awaiting-approval" />;
+    }
+    if (enforceCustomerChecks && !allowIncompleteProfile && isApproved(profile) && !isProfileComplete(profile)) {
       return <Navigate to="/profile?complete=1" />;
     }
   }
@@ -51,15 +54,13 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Welcome />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/awaiting-approval" element={<PrivateRoute allowPending allowIncompleteProfile><AwaitingApproval /></PrivateRoute>} />
+                    <Route path="/awaiting-approval" element={<PrivateRoute allowPending allowIncompleteProfile><AwaitingApproval /></PrivateRoute>} />
 
           <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/products" element={<Products />} />
             <Route path="/product/:id" element={<ProductDetail />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/customers" element={<Customers />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/order/:id" element={<OrderDetail />} />
             <Route path="/invoices" element={<Invoices />} />

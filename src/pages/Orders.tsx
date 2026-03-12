@@ -46,7 +46,7 @@ export default function Orders() {
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading Orders...</div>;
 
-  const statuses = ["All", "Created", "Approved", "Paid", "Dispatched", "Completed"];
+  const statuses = ["All", "Created", "Approved", "Invoiced", "Dispatched", "Cancelled", "Completed"];
   const currentPage = pagination?.page ?? page;
   const totalPages = Math.max(1, pagination?.total_pages ?? page);
   const hasPrevious = currentPage > 1;
@@ -55,7 +55,7 @@ export default function Orders() {
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <header className="space-y-4">
-        <h1 className="text-2xl font-black text-slate-900 uppercase tracking-widest">My Orders</h1>
+        <h1 className="text-2xl font-black text-slate-900 uppercase tracking-widest">Order Management</h1>
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -127,7 +127,7 @@ export default function Orders() {
               <ClipboardList className="w-8 h-8 text-slate-300" />
             </div>
             <p className="text-slate-400 font-black uppercase tracking-widest text-xs">No orders found</p>
-            <Link to="/products" className="text-primary font-black text-xs uppercase tracking-widest inline-block">Browse Products</Link>
+            <p className="text-slate-400 text-xs">New orders will appear here.</p>
           </div>
         )}
       </div>
