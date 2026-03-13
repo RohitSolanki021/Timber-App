@@ -7,17 +7,20 @@ import { ClipboardList, FileText, ChevronRight, User, Users } from "lucide-react
 export default function Dashboard() {
   const [user, setUser] = useState<UserType | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [kpis, setKpis] = useState<{ pending_orders_count?: number; new_orders_week?: number; due_invoices_count?: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [userData, ordersResponse] = await Promise.all([
+        const [userData, ordersResponse, dashboardResponse] = await Promise.all([
           apiProxy.getMe(),
-          apiProxy.getOrders({ page: 1, per_page: 20 })
+          apiProxy.getOrders({ page: 1, per_page: 20 }),
+          apiProxy.getAdminDashboard()
         ]);
         setUser(userData);
         setOrders(ordersResponse.data);
+        setKpis(dashboardResponse);
       } catch (err) {
         console.error(err);
       } finally {
@@ -49,9 +52,9 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Awaiting" value={summary.pendingApproval} />
-        <StatCard label="Invoiced" value={summary.invoiced} />
-        <StatCard label="Dispatched" value={summary.dispatched} />
+        <StatCard label="Awaiting" value={kpis?.pending_orders_count ?? summary.pendingApproval} />
+        <StatCard label="New Orders" value={kpis?.new_orders_week ?? 0} />
+        <StatCard label="Due Invoices" value={kpis?.due_invoices_count ?? 0} />
       </div>
 
       <section className="space-y-4">

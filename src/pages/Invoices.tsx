@@ -79,7 +79,7 @@ export default function Invoices() {
                 </span>
               </div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                {new Date(invoice.issue_date).toLocaleDateString()} • Order #{invoice.order_id}
+                {invoice.customerName || "Customer"} • {new Date(invoice.issue_date).toLocaleDateString()} • Order #{invoice.order_id}
               </p>
               <div className="flex justify-between items-center mt-3">
                 <p className="text-lg font-black text-slate-900">₹{invoice.grand_total.toLocaleString()}</p>

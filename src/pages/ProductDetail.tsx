@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { apiProxy } from "../apiProxy";
 import { Product } from "../types";
-import { ChevronLeft, ShoppingCart, Minus, Plus, Share2 } from "lucide-react";
+import { ChevronLeft, Share2 } from "lucide-react";
 import { getEffectiveProductPrice } from "../utils/pricing";
 import { resolveImageUrl } from "../utils/images";
 
@@ -10,7 +10,6 @@ export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
-  const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [pricingType, setPricingType] = useState(1);
 
@@ -29,16 +28,6 @@ export default function ProductDetail() {
     };
     fetchProduct();
   }, [id]);
-
-  const handleAddToCart = async () => {
-    if (!product) return;
-    try {
-      await apiProxy.addToCart(product.id, quantity);
-      navigate("/cart");
-    } catch {
-      alert("Failed to add to cart");
-    }
-  };
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
   if (!product) return <div className="p-8 text-center">Product not found</div>;
@@ -77,20 +66,11 @@ export default function ProductDetail() {
           </div>
         </div>
 
-        <div className="flex items-center bg-white border border-slate-100 rounded-2xl p-1 shadow-sm w-fit">
-          <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-12 h-12 flex items-center justify-center text-slate-600"><Minus className="w-5 h-5" /></button>
-          <span className="w-14 text-center font-black text-xl text-slate-900">{quantity}</span>
-          <button onClick={() => setQuantity(quantity + 1)} className="w-12 h-12 flex items-center justify-center text-slate-600"><Plus className="w-5 h-5" /></button>
+        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Availability</p>
+          <p className="text-sm font-black text-slate-900 mt-2">{product.stock_status || "In Stock"}</p>
         </div>
-      </div>
-
-      <div className="p-6 bg-white border-t border-slate-100 sticky bottom-16">
-        <button onClick={handleAddToCart} className="w-full py-5 bg-primary text-white font-bold rounded-2xl shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-3">
-          <ShoppingCart className="w-5 h-5" />
-          Add to Cart • ₹{(displayPrice * quantity).toLocaleString()}
-        </button>
       </div>
     </div>
   );
 }
-

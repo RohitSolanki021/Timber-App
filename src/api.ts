@@ -1,4 +1,4 @@
-import { User, Product, CartItem, Order, Invoice } from "./types";
+import { User, Product, Order, Invoice } from "./types";
 
 // Mock Data
 let mockUser: User = {
@@ -23,7 +23,6 @@ let mockProducts: Product[] = [
   { id: 'TIM-004', name: 'Walnut Hardwood', category: 'Timber', price: 45.00, priceUnit: 'ea', stock_status: 'in_stock', stock_quantity: 45, description: 'Rich walnut hardwood for high-end carpentry.' },
 ];
 
-let mockCart: CartItem[] = [];
 let mockOrders: Order[] = [
   {
     id: 'ORD-K9J2L4M1',
@@ -140,83 +139,8 @@ export const api = {
     return { data: filtered };
   },
 
-  async getCart(): Promise<CartItem[]> {
-    await sleep(100);
-    return [...mockCart];
-  },
-
-  async addToCart(product_id: string, quantity: number) {
-    await sleep(100);
-    const product = mockProducts.find(p => p.id === product_id);
-    if (!product) throw new Error("Product not found");
-
-    const existing = mockCart.find(item => item.product_id === product_id);
-    if (existing) {
-      existing.quantity = quantity;
-    } else {
-      mockCart.push({
-        product_id,
-        quantity,
-        name: product.name,
-        price: product.price,
-        unit: product.priceUnit || "ea"
-      });
-    }
-    return { success: true };
-  },
-
-  async removeFromCart(product_id: string) {
-    await sleep(100);
-    mockCart = mockCart.filter(item => item.product_id !== product_id);
-    return { success: true };
-  },
-
-  async checkout(shipping_address: string) {
-    await sleep(800);
-    const total = mockCart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    const orderId = `ORD-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    
-    const newOrder: Order = {
-      id: orderId,
-      customer_id: mockUser.id,
-      customerName: mockUser.name,
-      status: 'Created',
-      amount: total,
-      order_date: new Date().toISOString(),
-      paymentStatus: 'Credit',
-      pricing_type: mockUser.pricing_type || 1,
-      items: mockCart.map(item => ({
-        order_id: orderId,
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unitPrice: item.price,
-        price: item.price,
-        productName: item.name,
-        name: item.name,
-        unit: item.unit
-      }))
-    };
-
-    mockOrders.unshift(newOrder);
-    
-    const newInvoice: Invoice = {
-      id: `INV-${orderId.split('-')[1]}`,
-      order_id: orderId,
-      customer_id: mockUser.id,
-      customerName: mockUser.name,
-      issue_date: new Date().toISOString().slice(0, 10),
-      due_date: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-      sub_total: total,
-      cgst: 0,
-      sgst: 0,
-      grand_total: total,
-      status: 'Due',
-      pricing_type: mockUser.pricing_type || 1
-    };
-    mockInvoices.unshift(newInvoice);
-
-    mockCart = [];
-    return { order_id: orderId };
+  async checkout() {
+    throw new Error("Cart functionality has been removed.");
   },
 
   async uploadOrderImage(order_id: string, file: File) {

@@ -39,14 +39,6 @@ export interface Product {
   images?: ProductImage[];
 }
 
-export interface CartItem {
-  product_id: string;
-  quantity: number;
-  name: string;
-  price: number;
-  unit: string;
-}
-
 export interface OrderImage {
   id?: number;
   image_path: string;
@@ -119,4 +111,6 @@ export interface Customer {
   pricing_type?: number;
   status?: string;
   approval_status?: string;
+  sales_person_id?: number;
+  sales_person_name?: string;
 }

@@ -5,7 +5,7 @@ import { Order } from "../types";
 import { ArrowLeft } from "lucide-react";
 import { resolveImageUrl } from "../utils/images";
 
-const ORDER_WORKFLOW = ["Approved", "Invoiced", "Dispatched", "Completed", "Cancelled"];
+const ORDER_WORKFLOW = ["Created", "Approved", "Dispatched", "Completed"];
 
 export default function OrderDetail() {
   const { id } = useParams();
@@ -39,6 +39,12 @@ export default function OrderDetail() {
 
   if (loading) return <div className="p-8 text-center text-text-dark">Loading Order...</div>;
   if (!order) return <div className="p-8 text-center text-text-dark">Order not found</div>;
+  const currentIndexRaw = ORDER_WORKFLOW.findIndex(
+    (status) => status.toLowerCase() === String(order.status || "").toLowerCase()
+  );
+  const currentIndex = currentIndexRaw < 0 ? 0 : currentIndexRaw;
+  const progressPercent =
+    ORDER_WORKFLOW.length > 1 ? (currentIndex / (ORDER_WORKFLOW.length - 1)) * 100 : 0;
 
   return (
     <div className="bg-white min-h-screen pb-24">
@@ -54,8 +60,49 @@ export default function OrderDetail() {
         <div>
           <p className="text-text-dark text-2xl font-extrabold">{order.customerName || "Customer"}</p>
           <p className="text-text-dark/60 text-sm font-medium">Order #{order.id}</p>
+          <p className="text-[10px] text-text-dark/60 font-black uppercase tracking-widest mt-2">Customer: {order.customerName || "Customer"}</p>
           <p className="text-[10px] mt-2 px-2 py-1 inline-block rounded-full bg-slate-100 text-slate-700 font-black uppercase tracking-widest">{order.status}</p>
         </div>
+
+        <section className="space-y-3">
+          <h2 className="text-text-dark text-sm font-bold uppercase tracking-wider">Order Progress</h2>
+          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-4">
+            <div className="grid grid-cols-4 gap-2">
+              {ORDER_WORKFLOW.map((status, idx) => {
+                const isCompleted = idx < currentIndex;
+                const isActive = idx === currentIndex;
+                return (
+                  <div key={status} className="flex flex-col items-center text-center gap-2">
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-black tracking-widest border ${
+                        isCompleted
+                          ? "bg-primary text-white border-primary"
+                          : isActive
+                          ? "bg-white text-primary border-primary"
+                          : "bg-white text-slate-400 border-slate-200"
+                      }`}
+                    >
+                      {idx + 1}
+                    </div>
+                    <p
+                      className={`text-[10px] font-black uppercase tracking-widest ${
+                        isCompleted || isActive ? "text-slate-900" : "text-slate-400"
+                      }`}
+                    >
+                      {status}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        </section>
 
         <section className="space-y-3">
           <h2 className="text-text-dark text-sm font-bold uppercase tracking-wider">Workflow Actions</h2>

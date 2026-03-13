@@ -2,9 +2,8 @@
 import { Link } from "react-router-dom";
 import { apiProxy } from "../apiProxy";
 import { Product } from "../types";
-import { Search, Plus, Minus, ChevronRight, LayoutGrid, Package, TreePine } from "lucide-react";
+import { Search, ChevronRight, LayoutGrid, Package, TreePine } from "lucide-react";
 import { motion } from "motion/react";
-import { useCart } from "../context/CartContext";
 import { getEffectiveProductPrice } from "../utils/pricing";
 import { resolveImageUrl } from "../utils/images";
 
@@ -14,7 +13,6 @@ export default function Products() {
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
   const [pricingType, setPricingType] = useState(1);
-  const { getItemQuantity, updateQuantity } = useCart();
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -115,41 +113,6 @@ export default function Products() {
                   </div>
                 </Link>
                 <div className="flex items-center gap-2">
-                  {getItemQuantity(product.id) > 0 ? (
-                    <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
-                      <button
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          await updateQuantity(product.id, getItemQuantity(product.id) - 1);
-                        }}
-                        className="w-8 h-8 bg-white text-slate-400 rounded-lg flex items-center justify-center hover:text-primary transition-colors"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <span className="w-6 text-center text-xs font-black text-slate-900">
-                        {getItemQuantity(product.id)}
-                      </span>
-                      <button
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          await updateQuantity(product.id, getItemQuantity(product.id) + 1);
-                        }}
-                        className="w-8 h-8 bg-white text-slate-400 rounded-lg flex items-center justify-center hover:text-primary transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={async (e) => {
-                        e.preventDefault();
-                        await updateQuantity(product.id, 1);
-                      }}
-                      className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
-                  )}
                   <Link to={`/product/${product.id}`} className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-all">
                     <ChevronRight className="w-5 h-5" />
                   </Link>
@@ -168,4 +131,3 @@ export default function Products() {
     </div>
   );
 }
-

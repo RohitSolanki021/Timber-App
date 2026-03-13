@@ -28,8 +28,9 @@ export default function Customers() {
   };
 
   useEffect(() => {
-    loadCustomers();
-  }, [page]);
+    const timer = setTimeout(loadCustomers, 300);
+    return () => clearTimeout(timer);
+  }, [page, search]);
 
   const approveCustomer = async (customerId: number) => {
     setProcessingId(customerId);
@@ -103,6 +104,9 @@ export default function Customers() {
               <div className="grid grid-cols-2 gap-3 text-xs text-slate-500">
                 <p>Contact: <span className="font-semibold text-slate-700">{customer.contactPerson || "-"}</span></p>
                 <p>Phone: <span className="font-semibold text-slate-700">{customer.phone || "-"}</span></p>
+                <p>Outstanding: <span className="font-semibold text-slate-700">₹{Number(customer.outstandingBalance || 0).toLocaleString()}</span></p>
+                <p>Pricing Tier: <span className="font-semibold text-slate-700">{customer.pricing_type || "-"}</span></p>
+                <p>Sales Rep: <span className="font-semibold text-slate-700">{customer.sales_person_name || "Unassigned"}</span></p>
               </div>
               {!approved && (
                 <button

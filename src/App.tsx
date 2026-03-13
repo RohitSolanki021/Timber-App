@@ -13,8 +13,6 @@ import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Welcome from "./pages/Welcome";
 import AwaitingApproval from "./pages/AwaitingApproval";
-import { CartProvider } from "./context/CartContext";
-
 import { isApproved, isProfileComplete } from "./utils/accessControl";
 
 const PrivateRoute = ({
@@ -49,29 +47,27 @@ const PrivateRoute = ({
 
 export default function App() {
   return (
-    <CartProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Welcome />} />
-          <Route path="/login" element={<Login />} />
-                    <Route path="/awaiting-approval" element={<PrivateRoute allowPending allowIncompleteProfile><AwaitingApproval /></PrivateRoute>} />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Welcome />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/awaiting-approval" element={<PrivateRoute allowPending allowIncompleteProfile><AwaitingApproval /></PrivateRoute>} />
 
-          <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/products" element={<Products />} />
-            <Route path="/product/:id" element={<ProductDetail />} />
-            <Route path="/customers" element={<Customers />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/order/:id" element={<OrderDetail />} />
-            <Route path="/invoices" element={<Invoices />} />
-            <Route path="/invoice/:id" element={<InvoiceDetail />} />
-          </Route>
+        <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/customers" element={<Customers />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/order/:id" element={<OrderDetail />} />
+          <Route path="/invoices" element={<Invoices />} />
+          <Route path="/invoice/:id" element={<InvoiceDetail />} />
+        </Route>
 
-          <Route element={<PrivateRoute allowIncompleteProfile><Layout /></PrivateRoute>}>
-            <Route path="/profile" element={<Profile />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </CartProvider>
+        <Route element={<PrivateRoute allowIncompleteProfile><Layout /></PrivateRoute>}>
+          <Route path="/profile" element={<Profile />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }

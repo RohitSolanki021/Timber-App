@@ -18,8 +18,15 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await apiProxy.login({ email, password, app_role: "Admin / Owner" });
+      await apiProxy.login({ email, password });
       const profile = await apiProxy.getMe();
+      const role = String(profile?.role || "").toLowerCase();
+      const allowed = ["manager", "super admin"].includes(role);
+      if (!allowed) {
+        await apiProxy.logout();
+        setError("Only Manager or Super Admin accounts can access this admin app.");
+        return;
+      }
       localStorage.setItem("profile", JSON.stringify(profile));
       navigate("/dashboard");
     } catch (err) {

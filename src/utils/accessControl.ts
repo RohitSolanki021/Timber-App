@@ -16,10 +16,7 @@ export function isProfileComplete(user: Partial<User> | null | undefined): boole
   return Boolean(
     user.name?.trim() &&
     user.email?.trim() &&
-    user.phone?.trim() &&
-    user.address?.trim() &&
-    (user.contactPerson || user.contact_person)?.trim() &&
-    (user.businessName || user.business_name)?.trim()
+    user.phone?.trim()
   );
 }
 

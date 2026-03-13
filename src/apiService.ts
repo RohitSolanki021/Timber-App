@@ -1,5 +1,5 @@
 // API service for Timber & Plywood mobile app
-// Handles authentication, products, cart, orders, invoices, profile
+// Handles authentication, products, orders, invoices, profile
 
 import { Customer, Invoice, Order, PaginatedList } from "./types";
 
@@ -9,6 +9,7 @@ const API_BASE = (() => {
   if (!configured) return DEFAULT_API_BASE_URL;
   return configured.endsWith('/') ? configured.slice(0, -1) : configured;
 })();
+const ADMIN_API = `${API_BASE}/admin.php`;
 
 let token: string | null = null;
 
@@ -100,33 +101,7 @@ export const apiService = {
     return request(`${API_BASE}/products.php${query ? '?' + query : ''}`);
   },
 
-  // Cart
-  async getCart() {
-    const res = await request(`${API_BASE}/cart.php`);
-    return res.items || res;
-  },
-  async addToCart(product_id: string, quantity: number) {
-    return request(`${API_BASE}/cart.php`, {
-      method: 'POST',
-      body: JSON.stringify({ product_id, quantity })
-    });
-  },
-  async removeFromCart(product_id: string) {
-    return request(`${API_BASE}/cart.php?product_id=${product_id}`, {
-      method: 'DELETE'
-    });
-  },
-  async clearCart() {
-    return request(`${API_BASE}/cart.php`, { method: 'DELETE' });
-  },
-
   // Orders
-  async checkout(shipping_address: string) {
-    return request(`${API_BASE}/checkout.php`, {
-      method: 'POST',
-      body: JSON.stringify({ shipping_address })
-    });
-  },
   async createOrder(items: Array<{ product_id: string; quantity: number }>) {
     return request(`${API_BASE}/orders.php`, {
       method: 'POST',
@@ -143,8 +118,8 @@ export const apiService = {
     });
   },
   async getOrders(params: Record<string, any> = {}) {
-    const query = new URLSearchParams(params).toString();
-    const res = await request(`${API_BASE}/orders.php${query ? '?' + query : ''}`);
+    const query = new URLSearchParams({ resource: "orders", ...params }).toString();
+    const res = await request(`${ADMIN_API}?${query}`);
     return normalizeListResponse<Order>(res);
   },
   async getOrder(id: string) {
@@ -153,8 +128,8 @@ export const apiService = {
 
   // Invoices
   async getInvoices(params: Record<string, any> = {}) {
-    const query = new URLSearchParams(params).toString();
-    const res = await request(`${API_BASE}/invoices.php${query ? '?' + query : ''}`);
+    const query = new URLSearchParams({ resource: "invoices", ...params }).toString();
+    const res = await request(`${ADMIN_API}?${query}`);
     return normalizeListResponse<Invoice>(res);
   },
   async getInvoice(id: string) {
@@ -187,12 +162,12 @@ export const apiService = {
 
   // Admin - customers
   async getCustomers(params: Record<string, any> = {}) {
-    const query = new URLSearchParams(params).toString();
-    const res = await request(`${API_BASE}/customers.php${query ? '?' + query : ''}`);
+    const query = new URLSearchParams({ resource: "customers", ...params }).toString();
+    const res = await request(`${ADMIN_API}?${query}`);
     return normalizeListResponse<Customer>(res);
   },
   async approveCustomer(customer_id: number) {
-    return request(`${API_BASE}/customers.php?action=approve_customer`, {
+    return request(`${ADMIN_API}?action=approve_customer`, {
       method: 'POST',
       body: JSON.stringify({ customer_id })
     });
@@ -200,16 +175,20 @@ export const apiService = {
 
   // Admin - workflow actions
   async markInvoicePaid(invoice_id: string) {
-    return request(`${API_BASE}/invoices.php?action=mark_paid`, {
+    return request(`${ADMIN_API}?action=mark_invoice_paid`, {
       method: 'POST',
       body: JSON.stringify({ invoice_id })
     });
   },
   async updateOrderStatus(order_id: string, status: string) {
-    return request(`${API_BASE}/orders.php?action=update_status`, {
+    return request(`${ADMIN_API}?action=update_order_status`, {
       method: 'POST',
       body: JSON.stringify({ order_id, status })
     });
+  },
+
+  async getAdminDashboard() {
+    return request(`${ADMIN_API}?resource=dashboard`);
   },
 
   // Health

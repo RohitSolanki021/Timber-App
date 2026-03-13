@@ -96,6 +96,9 @@ export default function Orders() {
               <div>
                 <p className="text-sm font-black text-slate-900 group-hover:text-primary transition-colors">Order #{order.id}</p>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                  {order.customerName || "Customer"}
+                </p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
                   {new Date(order.order_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               </div>

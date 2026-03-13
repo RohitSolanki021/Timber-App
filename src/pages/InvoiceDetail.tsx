@@ -122,6 +122,12 @@ export default function InvoiceDetail() {
           </div>
 
           <div className="h-px bg-slate-50"></div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer</p>
+            <p className="text-sm font-black text-slate-900">{invoice.customerName || order.customerName || "Customer"}</p>
+          </div>
+
+          <div className="h-px bg-slate-50"></div>
 
           <div className="space-y-4">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bill To</p>
@@ -188,4 +194,3 @@ export default function InvoiceDetail() {
     </div>
   );
 }
-
