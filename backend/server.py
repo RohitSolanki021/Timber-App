@@ -157,13 +157,13 @@ def init_demo_data():
     db.users.insert_one(manager)
     
     customers = [
-        {"email": "customer1@example.com", "name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_name": "Manager User", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
-        {"email": "customer2@example.com", "name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_name": "Manager User", "address": "456 Commercial Complex", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
-        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_name": "Manager User", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
-        {"email": "customer4@example.com", "name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_name": "Manager User", "address": "321 Artisan Lane", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
-        {"email": "customer5@example.com", "name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_name": "Manager User", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
-        {"email": "customer6@example.com", "name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": False, "pricing_type": 2, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_name": "Manager User", "address": "890 Design District", "city": "Pune", "state": "Maharashtra", "pincode": "411001", "notes": "Account deactivated - payment issues"},
-        {"email": "customer7@example.com", "name": "Royal Furnishings", "contactPerson": "Robert Wilson", "phone": "9876543218", "role": "Customer", "approval_status": "Rejected", "is_active": False, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 0, "sales_person_name": "Manager User", "address": "234 Market Street", "city": "Kolkata", "state": "West Bengal", "pincode": "700001", "notes": "Rejected - incomplete documentation"},
+        {"email": "customer1@example.com", "name": "ABC Furniture Works", "business_name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_name": "Manager User", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area, Mumbai, Maharashtra - 400001", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
+        {"email": "customer2@example.com", "name": "XYZ Interiors", "business_name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_name": "Manager User", "address": "456 Commercial Complex, Delhi - 110001", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
+        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "business_name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_name": "Manager User", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub, Bangalore - 560001", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
+        {"email": "customer4@example.com", "name": "Elite Woodworks", "business_name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_name": "Manager User", "address": "321 Artisan Lane, Chennai - 600001", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
+        {"email": "customer5@example.com", "name": "Premium Plyboards", "business_name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_name": "Manager User", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center, Hyderabad - 500001", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
+        {"email": "customer6@example.com", "name": "Classic Interiors", "business_name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": False, "pricing_type": 2, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_name": "Manager User", "address": "890 Design District, Pune - 411001", "city": "Pune", "state": "Maharashtra", "pincode": "411001", "notes": "Account deactivated - payment issues"},
+        {"email": "customer7@example.com", "name": "Royal Furnishings", "business_name": "Royal Furnishings", "contactPerson": "Robert Wilson", "phone": "9876543218", "role": "Customer", "approval_status": "Rejected", "is_active": False, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 0, "sales_person_name": "Manager User", "address": "234 Market Street, Kolkata - 700001", "city": "Kolkata", "state": "West Bengal", "pincode": "700001", "notes": "Rejected - incomplete documentation"},
     ]
     for i, cust in enumerate(customers, 1):
         cust["id"] = i
@@ -214,6 +214,22 @@ async def health():
 
 @app.post("/api/login")
 async def login(request: LoginRequest):
+    # Check if customer login
+    if request.app_role == "Customer":
+        customer = db.customers.find_one({"email": request.email, "password": hash_password(request.password)})
+        if not customer:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Check if customer is active
+        if not customer.get("is_active", True):
+            raise HTTPException(status_code=403, detail="Account is deactivated. Please contact support.")
+        
+        token = create_token(f"customer_{customer['id']}", "Customer")
+        customer_data = {k: v for k, v in customer.items() if k not in ["_id", "password"]}
+        
+        return {"token": token, "user": customer_data}
+    
+    # Admin/Manager login
     user = db.users.find_one({"email": request.email, "password": hash_password(request.password)})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -256,7 +272,19 @@ async def register(request: RegisterRequest):
 
 @app.get("/api/me")
 async def get_me(payload: dict = Depends(verify_token)):
-    user = db.users.find_one({"_id": ObjectId(payload["user_id"])})
+    user_id = payload["user_id"]
+    role = payload.get("role", "")
+    
+    # Check if customer
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+        customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return customer
+    
+    # Admin/Manager
+    user = db.users.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user_data = serialize_doc(user)
@@ -799,3 +827,260 @@ async def admin_action(
         return {"success": True, "message": f"Customer {status_text}"}
     
     return {"error": "Unknown action"}
+
+
+
+# ============ CUSTOMER PORTAL HELPER ============
+def get_customer_id_from_token(payload: dict) -> int:
+    """Extract customer ID from JWT payload"""
+    user_id = payload.get("user_id", "")
+    if not user_id.startswith("customer_"):
+        raise HTTPException(status_code=403, detail="Customer access required")
+    return int(user_id.replace("customer_", ""))
+
+# ============ CUSTOMER CART ROUTES ============
+@app.get("/api/cart")
+async def get_cart(payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    cart = db.carts.find_one({"customer_id": customer_id}, {"_id": 0})
+    if not cart:
+        return []
+    return cart.get("items", [])
+
+@app.post("/api/cart")
+async def add_to_cart(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    product_id = body.get("product_id")
+    quantity = int(body.get("quantity", 1))
+    
+    # Get product details
+    product = db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get customer pricing type
+    customer = db.customers.find_one({"id": customer_id})
+    pricing_type = str(customer.get("pricing_type", 1))
+    price = product.get("pricing_rates", {}).get(pricing_type, product.get("price", 0))
+    
+    # Get or create cart
+    cart = db.carts.find_one({"customer_id": customer_id})
+    if not cart:
+        cart = {"customer_id": customer_id, "items": []}
+        db.carts.insert_one(cart)
+    
+    items = cart.get("items", [])
+    
+    # Check if product already in cart
+    found = False
+    for item in items:
+        if item["product_id"] == product_id:
+            item["quantity"] = quantity
+            item["price"] = float(price)
+            found = True
+            break
+    
+    if not found:
+        items.append({
+            "product_id": product_id,
+            "name": product.get("name"),
+            "quantity": quantity,
+            "price": float(price),
+            "unit": product.get("priceUnit", "ea"),
+            "priceUnit": product.get("priceUnit", "ea")
+        })
+    
+    db.carts.update_one(
+        {"customer_id": customer_id}, 
+        {"$set": {"items": items}},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Cart updated"}
+
+@app.delete("/api/cart")
+async def clear_or_remove_cart(
+    product_id: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    customer_id = get_customer_id_from_token(payload)
+    
+    if product_id:
+        # Remove specific product
+        cart = db.carts.find_one({"customer_id": customer_id})
+        if cart:
+            items = [item for item in cart.get("items", []) if item["product_id"] != product_id]
+            db.carts.update_one({"customer_id": customer_id}, {"$set": {"items": items}})
+        return {"success": True, "message": "Item removed from cart"}
+    else:
+        # Clear entire cart
+        db.carts.delete_one({"customer_id": customer_id})
+        return {"success": True, "message": "Cart cleared"}
+
+# ============ CUSTOMER CHECKOUT ROUTE ============
+@app.post("/api/checkout")
+async def customer_checkout(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    shipping_address = body.get("shipping_address", "")
+    
+    # Get cart
+    cart = db.carts.find_one({"customer_id": customer_id})
+    if not cart or not cart.get("items"):
+        raise HTTPException(status_code=400, detail="Cart is empty")
+    
+    items = cart.get("items", [])
+    
+    # Get customer details
+    customer = db.customers.find_one({"id": customer_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Check if customer is approved
+    if customer.get("approval_status") != "Approved":
+        raise HTTPException(status_code=403, detail="Your account is pending approval")
+    
+    # Calculate total
+    total = sum(item["price"] * item["quantity"] for item in items)
+    
+    # Generate order ID
+    order_count = db.orders.count_documents({})
+    order_id = f"ORD-{secrets.token_hex(4).upper()}"
+    
+    # Create order
+    order = {
+        "id": order_id,
+        "customer_id": customer_id,
+        "customerName": customer.get("name"),
+        "status": "Created",
+        "amount": total,
+        "grand_total": total,
+        "order_date": datetime.now(timezone.utc).isoformat(),
+        "paymentStatus": "Credit",
+        "sales_person_id": None,
+        "salesPerson": None,
+        "shipping_address": shipping_address or customer.get("address", ""),
+        "pricing_type": customer.get("pricing_type", 1),
+        "items": [
+            {
+                "product_id": item["product_id"],
+                "productName": item["name"],
+                "name": item["name"],
+                "quantity": item["quantity"],
+                "unitPrice": item["price"],
+                "price": item["price"],
+                "unit": item.get("unit", "ea")
+            }
+            for item in items
+        ],
+        "images": [],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.orders.insert_one(order)
+    
+    # Clear cart after checkout
+    db.carts.delete_one({"customer_id": customer_id})
+    
+    return {"success": True, "order_id": order_id, "message": "Order placed successfully"}
+
+# ============ CUSTOMER ORDERS ROUTES ============
+@app.get("/api/customer/orders")
+async def get_customer_orders(
+    page: int = 1,
+    per_page: int = 10,
+    payload: dict = Depends(verify_token)
+):
+    customer_id = get_customer_id_from_token(payload)
+    skip = (page - 1) * per_page
+    
+    query = {"customer_id": customer_id}
+    total = db.orders.count_documents(query)
+    orders = list(db.orders.find(query, {"_id": 0}).sort("order_date", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": orders,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/customer/orders/{order_id}")
+async def get_customer_order(order_id: str, payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    order = db.orders.find_one({"id": order_id, "customer_id": customer_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+# ============ CUSTOMER INVOICES ROUTES ============
+@app.get("/api/customer/invoices")
+async def get_customer_invoices(
+    page: int = 1,
+    per_page: int = 10,
+    payload: dict = Depends(verify_token)
+):
+    customer_id = get_customer_id_from_token(payload)
+    skip = (page - 1) * per_page
+    
+    query = {"customer_id": customer_id}
+    total = db.invoices.count_documents(query)
+    invoices = list(db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": invoices,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/customer/invoices/{invoice_id}")
+async def get_customer_invoice(invoice_id: str, payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    invoice = db.invoices.find_one({"id": invoice_id, "customer_id": customer_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"data": invoice}
+
+# ============ CUSTOMER PROFILE ROUTES ============
+@app.patch("/api/customer/profile")
+async def update_customer_profile(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    
+    allowed_fields = ["name", "contactPerson", "phone", "address", "city", "state", "pincode", 
+                      "gst_number", "business_name", "businessName"]
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in allowed_fields:
+        if field in body:
+            update_data[field] = body[field]
+    
+    # Handle businessName alias
+    if "businessName" in body:
+        update_data["business_name"] = body["businessName"]
+    
+    db.customers.update_one({"id": customer_id}, {"$set": update_data})
+    
+    customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
+    return {"success": True, "message": "Profile updated", "data": customer}
+
+@app.post("/api/customer/change-password")
+async def change_customer_password(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    customer_id = get_customer_id_from_token(payload)
+    current_password = body.get("current_password")
+    new_password = body.get("new_password")
+    
+    if not current_password or not new_password:
+        raise HTTPException(status_code=400, detail="Current and new password required")
+    
+    customer = db.customers.find_one({"id": customer_id, "password": hash_password(current_password)})
+    if not customer:
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    db.customers.update_one({"id": customer_id}, {"$set": {"password": hash_password(new_password)}})
+    return {"success": True, "message": "Password changed successfully"}
