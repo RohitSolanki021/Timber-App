@@ -12,36 +12,39 @@ import InvoiceDetail from "./pages/InvoiceDetail";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Welcome from "./pages/Welcome";
-import AwaitingApproval from "./pages/AwaitingApproval";
-import { isApproved, isProfileComplete } from "./utils/accessControl";
 
-const PrivateRoute = ({
-  children,
-  allowPending = false,
-  allowIncompleteProfile = false
-}: {
-  children: React.ReactNode;
-  allowPending?: boolean;
-  allowIncompleteProfile?: boolean;
-}) => {
-  const token = localStorage.getItem("token");
-  if (!token) return <Navigate to="/login" />;
+// Check if user is authenticated
+const isAuthenticated = () => {
+  return !!localStorage.getItem("token");
+};
 
-  const raw = localStorage.getItem("profile");
-  const profile = raw ? JSON.parse(raw) : null;
-
-  if (profile) {
-    const role = String(profile.role || "").toLowerCase();
-    const enforceCustomerChecks = ["customer", "sub-user"].includes(role);
-
-    if (enforceCustomerChecks && !allowPending && !isApproved(profile)) {
-      return <Navigate to="/awaiting-approval" />;
-    }
-    if (enforceCustomerChecks && !allowIncompleteProfile && isApproved(profile) && !isProfileComplete(profile)) {
-      return <Navigate to="/profile?complete=1" />;
-    }
+// Check if user has admin role
+const isAdmin = () => {
+  try {
+    const profile = localStorage.getItem("profile");
+    if (!profile) return false;
+    const user = JSON.parse(profile);
+    const role = String(user.role || "").toLowerCase();
+    return ["manager", "super admin", "admin"].includes(role);
+  } catch {
+    return false;
   }
+};
 
+const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!isAdmin()) {
+    return <Navigate to="/login" replace />;
+  }
   return <>{children}</>;
 };
 
@@ -49,11 +52,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/awaiting-approval" element={<PrivateRoute allowPending allowIncompleteProfile><AwaitingApproval /></PrivateRoute>} />
 
-        <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
+        {/* Protected Admin Routes */}
+        <Route element={<AdminRoute><Layout /></AdminRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
           <Route path="/product/:id" element={<ProductDetail />} />
@@ -62,11 +66,11 @@ export default function App() {
           <Route path="/order/:id" element={<OrderDetail />} />
           <Route path="/invoices" element={<Invoices />} />
           <Route path="/invoice/:id" element={<InvoiceDetail />} />
-        </Route>
-
-        <Route element={<PrivateRoute allowIncompleteProfile><Layout /></PrivateRoute>}>
           <Route path="/profile" element={<Profile />} />
         </Route>
+
+        {/* Catch-all redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

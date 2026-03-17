@@ -170,15 +170,15 @@ export default function InvoiceDetail() {
           <div className="pt-6 border-t border-slate-50 space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Subtotal</span>
-              <span className="text-sm font-black text-slate-900">₹{invoice.sub_total.toLocaleString()}</span>
+              <span className="text-sm font-black text-slate-900">₹{Number(invoice.sub_total).toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CGST + SGST</span>
-              <span className="text-sm font-black text-slate-900">₹{(parseFloat(invoice.cgst) + parseFloat(invoice.sgst)).toLocaleString()}</span>
+              <span className="text-sm font-black text-slate-900">₹{(Number(invoice.cgst) + Number(invoice.sgst)).toLocaleString()}</span>
             </div>
             <div className="pt-4 flex justify-between items-center">
               <span className="text-sm font-black text-slate-900 uppercase tracking-[0.15em]">Total Amount</span>
-              <span className="text-3xl font-black text-slate-900">₹{invoice.grand_total.toLocaleString()}</span>
+              <span className="text-3xl font-black text-slate-900">₹{Number(invoice.grand_total).toLocaleString()}</span>
             </div>
           </div>
         </div>

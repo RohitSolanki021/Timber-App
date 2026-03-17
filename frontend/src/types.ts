@@ -114,3 +114,11 @@ export interface Customer {
   sales_person_id?: number;
   sales_person_name?: string;
 }
+
+export interface CartItem {
+  product_id: string;
+  name: string;
+  price: number;
+  priceUnit?: string;
+  quantity: number;
+}
