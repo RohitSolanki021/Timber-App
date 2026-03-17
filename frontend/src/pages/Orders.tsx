@@ -145,7 +145,12 @@ export default function Orders() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50 transition-colors" data-testid={`order-row-${order.id}`}>
+                  <tr 
+                    key={order.id} 
+                    className="hover:bg-slate-50 transition-colors cursor-pointer" 
+                    data-testid={`order-row-${order.id}`}
+                    onClick={() => window.location.href = `/order/${order.id}`}
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
@@ -183,6 +188,7 @@ export default function Orders() {
                         to={`/order/${order.id}`}
                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
                         data-testid={`view-order-${order.id}`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         View Details
                         <ChevronRight className="w-4 h-4" />

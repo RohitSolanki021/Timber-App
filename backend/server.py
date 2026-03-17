@@ -109,7 +109,7 @@ def init_demo_data():
         "pricing_type": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    admin_result = db.users.insert_one(admin)
+    admin_result = db.users.insert_one(admin)  # noqa: F841
     
     # Create manager user
     manager = {

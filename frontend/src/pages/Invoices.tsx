@@ -133,8 +133,12 @@ export default function Invoices() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleInvoices.map((invoice) => (
-                  <tr key={invoice.id} className="hover:bg-slate-50 transition-colors" data-testid={`invoice-row-${invoice.id}`}>
-                    <td className="px-6 py-4">
+                  <tr 
+                    key={invoice.id} 
+                    className="hover:bg-slate-50 transition-colors cursor-pointer" 
+                    data-testid={`invoice-row-${invoice.id}`}
+                    onClick={() => window.location.href = `/invoice/${invoice.id}`}
+                  >                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                           invoice.status === 'Paid' ? 'bg-emerald-50' : 'bg-amber-50'
@@ -153,6 +157,7 @@ export default function Invoices() {
                       <Link 
                         to={`/order/${invoice.order_id}`}
                         className="text-primary hover:underline font-medium"
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {invoice.order_id}
                       </Link>
@@ -200,6 +205,7 @@ export default function Invoices() {
                         to={`/invoice/${invoice.id}`}
                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
                         data-testid={`view-invoice-${invoice.id}`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         View Details
                         <ChevronRight className="w-4 h-4" />
