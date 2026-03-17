@@ -326,22 +326,27 @@ async def create_product(
         raise HTTPException(status_code=400, detail="Product with this name already exists")
     
     product_id = body.get("id") or get_next_product_id(body.get("category", "Plywood"))
+    base_price = float(body.get("price", 0))
+    
+    # Use provided pricing_rates or calculate defaults
+    provided_rates = body.get("pricing_rates", {})
+    pricing_rates = {
+        "1": float(provided_rates.get("1", base_price)),
+        "2": float(provided_rates.get("2", base_price * 0.95)),
+        "3": float(provided_rates.get("3", base_price * 0.90))
+    }
     
     product = {
         "id": product_id,
         "name": body.get("name"),
         "category": body.get("category"),
-        "price": float(body.get("price", 0)),
+        "price": base_price,
         "priceUnit": body.get("priceUnit", "ea"),
         "stock_status": body.get("stock_status", "in_stock"),
         "stock_quantity": int(body.get("stock_quantity", 0)),
         "description": body.get("description", ""),
         "primary_image": body.get("primary_image", ""),
-        "pricing_rates": body.get("pricing_rates", {
-            "1": float(body.get("price", 0)),
-            "2": float(body.get("price", 0)) * 0.95,
-            "3": float(body.get("price", 0)) * 0.90
-        }),
+        "pricing_rates": pricing_rates,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
     }

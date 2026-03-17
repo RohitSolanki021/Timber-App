@@ -22,6 +22,11 @@ const initialFormData: ProductFormData = {
   stock_quantity: 0,
   description: '',
   primary_image: '',
+  pricing_rates: {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+  },
 };
 
 export default function Products() {
@@ -108,7 +113,11 @@ export default function Products() {
       stock_quantity: product.stock_quantity || 0,
       description: product.description || '',
       primary_image: product.primary_image || '',
-      pricing_rates: product.pricing_rates,
+      pricing_rates: product.pricing_rates || {
+        "1": product.price || 0,
+        "2": (product.price || 0) * 0.95,
+        "3": (product.price || 0) * 0.90,
+      },
     });
     setFormErrors({});
     setSlideOverMode('edit');
@@ -128,11 +137,11 @@ export default function Products() {
     
     setSaving(true);
     try {
-      // Calculate pricing rates based on base price
-      const pricingRates = {
+      // Use manual pricing rates from form
+      const pricingRates = formData.pricing_rates || {
         "1": formData.price,
-        "2": Math.round(formData.price * 0.95 * 100) / 100,
-        "3": Math.round(formData.price * 0.90 * 100) / 100,
+        "2": formData.price * 0.95,
+        "3": formData.price * 0.90,
       };
       
       const dataToSave = { ...formData, pricing_rates: pricingRates };
@@ -430,13 +439,24 @@ export default function Products() {
             <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
               <IndianRupee className="w-4 h-4" /> Pricing
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Base Price (₹) *</label>
                 <input
                   type="number"
                   value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => {
+                    const newPrice = parseFloat(e.target.value) || 0;
+                    setFormData({ 
+                      ...formData, 
+                      price: newPrice,
+                      pricing_rates: {
+                        "1": formData.pricing_rates?.["1"] || newPrice,
+                        "2": formData.pricing_rates?.["2"] || newPrice * 0.95,
+                        "3": formData.pricing_rates?.["3"] || newPrice * 0.90,
+                      }
+                    });
+                  }}
                   className={`w-full px-4 py-2.5 bg-slate-50 border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all ${formErrors.price ? 'border-red-300' : 'border-slate-200'}`}
                   placeholder="Enter price"
                   min="0"
@@ -461,9 +481,99 @@ export default function Products() {
                 </select>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Tier 2 price: ₹{((formData.price || 0) * 0.95).toFixed(2)} | Tier 3 price: ₹{((formData.price || 0) * 0.90).toFixed(2)}
-            </p>
+            
+            {/* Manual Tier Pricing */}
+            <div className="p-4 bg-slate-50 rounded-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-slate-700">Customer Tier Pricing</h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const basePrice = formData.price || 0;
+                    setFormData({
+                      ...formData,
+                      pricing_rates: {
+                        "1": basePrice,
+                        "2": Math.round(basePrice * 0.95 * 100) / 100,
+                        "3": Math.round(basePrice * 0.90 * 100) / 100,
+                      }
+                    });
+                  }}
+                  className="text-xs text-primary hover:underline"
+                  data-testid="auto-calculate-btn"
+                >
+                  Auto-calculate from base
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Tier 1 (Standard)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                    <input
+                      type="number"
+                      value={formData.pricing_rates?.["1"] || 0}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        pricing_rates: {
+                          ...formData.pricing_rates,
+                          "1": parseFloat(e.target.value) || 0,
+                        }
+                      })}
+                      className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      min="0"
+                      step="0.01"
+                      data-testid="input-tier1-price"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Tier 2 (Wholesale)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                    <input
+                      type="number"
+                      value={formData.pricing_rates?.["2"] || 0}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        pricing_rates: {
+                          ...formData.pricing_rates,
+                          "2": parseFloat(e.target.value) || 0,
+                        }
+                      })}
+                      className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      min="0"
+                      step="0.01"
+                      data-testid="input-tier2-price"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Tier 3 (Premium)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                    <input
+                      type="number"
+                      value={formData.pricing_rates?.["3"] || 0}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        pricing_rates: {
+                          ...formData.pricing_rates,
+                          "3": parseFloat(e.target.value) || 0,
+                        }
+                      })}
+                      className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      min="0"
+                      step="0.01"
+                      data-testid="input-tier3-price"
+                    />
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">
+                Set custom prices for each customer tier. Use "Auto-calculate" to set Tier 2 at 5% off and Tier 3 at 10% off.
+              </p>
+            </div>
           </div>
 
           {/* Stock */}
