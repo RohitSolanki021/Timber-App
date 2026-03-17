@@ -14,6 +14,7 @@ import InvoiceDetail from "./pages/InvoiceDetail";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Welcome from "./pages/Welcome";
+import Users from "./pages/Users";
 
 // Check if user is authenticated
 const isAuthenticated = () => {
@@ -33,6 +34,18 @@ const isAdmin = () => {
   }
 };
 
+// Check if user is Super Admin
+const isSuperAdmin = () => {
+  try {
+    const profile = localStorage.getItem("profile");
+    if (!profile) return false;
+    const user = JSON.parse(profile);
+    return String(user.role || "").toLowerCase() === "super admin";
+  } catch {
+    return false;
+  }
+};
+
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
@@ -46,6 +59,16 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   }
   if (!isAdmin()) {
     return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!isSuperAdmin()) {
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 };
@@ -71,6 +94,8 @@ export default function App() {
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/invoice/:id" element={<InvoiceDetail />} />
             <Route path="/profile" element={<Profile />} />
+            {/* Super Admin Only Routes */}
+            <Route path="/users" element={<SuperAdminRoute><Users /></SuperAdminRoute>} />
           </Route>
 
           {/* Catch-all redirect */}

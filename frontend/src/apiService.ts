@@ -333,5 +333,35 @@ export const apiService = {
   // Health
   async getHealth() {
     return request(`${API_BASE}/health`);
+  },
+
+  // ============ USER MANAGEMENT (Super Admin Only) ============
+  async getUsers(params: Record<string, any> = {}) {
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    return request(`${API_BASE}/users${query ? `?${query}` : ''}`);
+  },
+
+  async getUser(email: string) {
+    return request(`${API_BASE}/users/${encodeURIComponent(email)}`);
+  },
+
+  async createUser(data: { name: string; email: string; password: string; phone?: string; role: string }) {
+    return request(`${API_BASE}/users`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateUser(email: string, data: { name?: string; email?: string; phone?: string; role?: string; is_active?: boolean }) {
+    return request(`${API_BASE}/users/${encodeURIComponent(email)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async deleteUser(email: string) {
+    return request(`${API_BASE}/users/${encodeURIComponent(email)}`, {
+      method: 'DELETE'
+    });
   }
 };

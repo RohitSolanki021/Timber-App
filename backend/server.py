@@ -156,6 +156,19 @@ def init_demo_data():
     }
     db.users.insert_one(manager)
     
+    # Worker Admin (Normal Admin with limited access)
+    worker_admin = {
+        "email": "worker@naturalplylam.com",
+        "password": hash_password("worker123"),
+        "name": "Worker Admin",
+        "role": "Admin",
+        "phone": "9876543219",
+        "approval_status": "Approved",
+        "pricing_type": 1,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    db.users.insert_one(worker_admin)
+    
     # Sales Person
     sales_person = {
         "email": "sales@naturalplylam.com",
@@ -248,7 +261,8 @@ async def login(request: LoginRequest):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    token = create_token(str(user["_id"]), user["role"])
+    # Use email as user_id for staff users
+    token = create_token(user["email"], user["role"])
     user_data = serialize_doc(user)
     del user_data["password"]
     
@@ -297,8 +311,13 @@ async def get_me(payload: dict = Depends(verify_token)):
             raise HTTPException(status_code=404, detail="Customer not found")
         return customer
     
-    # Admin/Manager
-    user = db.users.find_one({"_id": ObjectId(user_id)})
+    # Admin/Manager - first try by email (new format), then by ObjectId (legacy)
+    user = db.users.find_one({"email": user_id})
+    if not user:
+        try:
+            user = db.users.find_one({"_id": ObjectId(user_id)})
+        except:
+            pass
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user_data = serialize_doc(user)
@@ -667,6 +686,185 @@ async def delete_customer(
             }}
         )
         return {"success": True, "message": "Customer archived successfully"}
+
+# ============ USER MANAGEMENT ROUTES (Super Admin Only) ============
+
+class UserCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=6)
+    phone: Optional[str] = None
+    role: str = Field(..., pattern="^(Super Admin|Admin|Sales Person)$")
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+def require_super_admin(payload: dict):
+    """Check if user is Super Admin"""
+    role = payload.get("role", "").lower()
+    if role != "super admin":
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    return payload
+
+@app.get("/api/users")
+async def list_users(
+    page: int = 1,
+    per_page: int = 10,
+    search: Optional[str] = None,
+    role: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """List all staff users (Super Admin only)"""
+    require_super_admin(payload)
+    
+    skip = (page - 1) * per_page
+    query = {"role": {"$in": ["Super Admin", "Admin", "Manager", "Sales Person"]}}
+    
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if role and role != "all":
+        query["role"] = role
+    
+    total = db.users.count_documents(query)
+    users = list(db.users.find(query, {"_id": 0, "password": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    # Add id field from _id if not present
+    for user in users:
+        if "_id" in user:
+            user["id"] = str(user.pop("_id"))
+    
+    return {
+        "data": users,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/users/{user_email}")
+async def get_user(
+    user_email: str,
+    payload: dict = Depends(verify_token)
+):
+    """Get a specific user (Super Admin only)"""
+    require_super_admin(payload)
+    
+    user = db.users.find_one({"email": user_email}, {"password": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user["id"] = str(user.pop("_id"))
+    return {"user": user}
+
+@app.post("/api/users")
+async def create_user(
+    data: UserCreate,
+    payload: dict = Depends(verify_token)
+):
+    """Create a new staff user (Super Admin only)"""
+    require_super_admin(payload)
+    
+    # Check if email already exists
+    existing = db.users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    new_user = {
+        "email": data.email,
+        "password": hash_password(data.password),
+        "name": data.name,
+        "role": data.role,
+        "phone": data.phone or "",
+        "approval_status": "Approved",
+        "is_active": True,
+        "pricing_type": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    result = db.users.insert_one(new_user)
+    new_user["id"] = str(result.inserted_id)
+    del new_user["password"]
+    del new_user["_id"]
+    
+    return {"success": True, "message": "User created successfully", "user": new_user}
+
+@app.put("/api/users/{user_email}")
+async def update_user(
+    user_email: str,
+    data: UserUpdate,
+    payload: dict = Depends(verify_token)
+):
+    """Update a staff user (Super Admin only)"""
+    require_super_admin(payload)
+    
+    existing = db.users.find_one({"email": user_email})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent changing own role
+    if user_email == payload.get("user_id") and data.role and data.role != existing.get("role"):
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if data.name is not None:
+        update_data["name"] = data.name
+    if data.email is not None and data.email != user_email:
+        # Check if new email exists
+        if db.users.find_one({"email": data.email}):
+            raise HTTPException(status_code=400, detail="Email already in use")
+        update_data["email"] = data.email
+    if data.phone is not None:
+        update_data["phone"] = data.phone
+    if data.role is not None:
+        update_data["role"] = data.role
+    if data.is_active is not None:
+        update_data["is_active"] = data.is_active
+    
+    db.users.update_one({"email": user_email}, {"$set": update_data})
+    
+    updated_user = db.users.find_one({"email": data.email or user_email}, {"password": 0})
+    updated_user["id"] = str(updated_user.pop("_id"))
+    
+    return {"success": True, "message": "User updated successfully", "user": updated_user}
+
+@app.delete("/api/users/{user_email}")
+async def delete_user(
+    user_email: str,
+    payload: dict = Depends(verify_token)
+):
+    """Delete a staff user (Super Admin only)"""
+    require_super_admin(payload)
+    
+    existing = db.users.find_one({"email": user_email})
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Prevent self-deletion
+    if user_email == payload.get("user_id"):
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Prevent deleting the last Super Admin
+    if existing.get("role") == "Super Admin":
+        super_admin_count = db.users.count_documents({"role": "Super Admin"})
+        if super_admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the last Super Admin")
+    
+    db.users.delete_one({"email": user_email})
+    
+    return {"success": True, "message": "User deleted successfully"}
 
 # ============ ADMIN ROUTES ============
 @app.get("/api/admin")

@@ -46,6 +46,16 @@ export default function Customers() {
   const navigate = useNavigate();
   const toast = useToast();
   
+  // Check if user is Super Admin
+  const isSuperAdmin = (() => {
+    try {
+      const profile = localStorage.getItem("profile");
+      return profile ? JSON.parse(profile).role?.toLowerCase() === 'super admin' : false;
+    } catch {
+      return false;
+    }
+  })();
+  
   // Data state
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -373,69 +383,75 @@ export default function Customers() {
               >
                 <Eye className="w-4 h-4" /> View Details
               </button>
-              <button
-                onClick={() => handleEditCustomer(customer)}
-                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-                data-testid={`edit-customer-${customer.id}`}
-              >
-                <Edit2 className="w-4 h-4" /> Edit
-              </button>
               
-              <div className="h-px bg-slate-200 my-1" />
-              
-              {customer.approval_status === 'Pending' && (
+              {/* Super Admin only actions */}
+              {isSuperAdmin && (
                 <>
                   <button
-                    onClick={() => handleApprove(customer)}
-                    className="w-full px-4 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"
-                    data-testid={`approve-customer-${customer.id}`}
+                    onClick={() => handleEditCustomer(customer)}
+                    className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    data-testid={`edit-customer-${customer.id}`}
                   >
-                    <CheckCircle2 className="w-4 h-4" /> Approve
+                    <Edit2 className="w-4 h-4" /> Edit
                   </button>
+                  
+                  <div className="h-px bg-slate-200 my-1" />
+                  
+                  {customer.approval_status === 'Pending' && (
+                    <>
+                      <button
+                        onClick={() => handleApprove(customer)}
+                        className="w-full px-4 py-2 text-left text-sm text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"
+                        data-testid={`approve-customer-${customer.id}`}
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Approve
+                      </button>
+                      <button
+                        onClick={() => handleReject(customer)}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        data-testid={`reject-customer-${customer.id}`}
+                      >
+                        <XCircle className="w-4 h-4" /> Reject
+                      </button>
+                    </>
+                  )}
+                  
+                  {customer.approval_status === 'Approved' && (
+                    <button
+                      onClick={() => handleToggleStatus(customer)}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
+                        customer.is_active 
+                          ? 'text-amber-600 hover:bg-amber-50' 
+                          : 'text-emerald-600 hover:bg-emerald-50'
+                      }`}
+                      data-testid={`toggle-customer-${customer.id}`}
+                    >
+                      <Power className="w-4 h-4" /> 
+                      {customer.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  )}
+                  
+                  <div className="h-px bg-slate-200 my-1" />
+                  
+                  {customer.approval_status !== 'Archived' && (
+                    <button
+                      onClick={() => handleArchive(customer)}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                      data-testid={`archive-customer-${customer.id}`}
+                    >
+                      <Archive className="w-4 h-4" /> Archive
+                    </button>
+                  )}
+              
                   <button
-                    onClick={() => handleReject(customer)}
+                    onClick={() => handleDelete(customer)}
                     className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                    data-testid={`reject-customer-${customer.id}`}
+                    data-testid={`delete-customer-${customer.id}`}
                   >
-                    <XCircle className="w-4 h-4" /> Reject
+                    <Trash2 className="w-4 h-4" /> Delete
                   </button>
                 </>
               )}
-              
-              {customer.approval_status === 'Approved' && (
-                <button
-                  onClick={() => handleToggleStatus(customer)}
-                  className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 ${
-                    customer.is_active 
-                      ? 'text-amber-600 hover:bg-amber-50' 
-                      : 'text-emerald-600 hover:bg-emerald-50'
-                  }`}
-                  data-testid={`toggle-customer-${customer.id}`}
-                >
-                  <Power className="w-4 h-4" /> 
-                  {customer.is_active ? 'Deactivate' : 'Activate'}
-                </button>
-              )}
-              
-              <div className="h-px bg-slate-200 my-1" />
-              
-              {customer.approval_status !== 'Archived' && (
-                <button
-                  onClick={() => handleArchive(customer)}
-                  className="w-full px-4 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 flex items-center gap-2"
-                  data-testid={`archive-customer-${customer.id}`}
-                >
-                  <Archive className="w-4 h-4" /> Archive
-                </button>
-              )}
-              
-              <button
-                onClick={() => handleDelete(customer)}
-                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                data-testid={`delete-customer-${customer.id}`}
-              >
-                <Trash2 className="w-4 h-4" /> Delete
-              </button>
             </div>
           )}
         </div>
@@ -499,16 +515,20 @@ export default function Customers() {
           <h1 className="text-2xl lg:text-3xl font-bold text-slate-900" data-testid="customers-title">
             Customers
           </h1>
-          <p className="text-slate-500 mt-1">Manage customer accounts and approvals</p>
+          <p className="text-slate-500 mt-1">
+            {isSuperAdmin ? 'Manage customer accounts and approvals' : 'View customer accounts'}
+          </p>
         </div>
-        <button
-          onClick={handleAddCustomer}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white font-medium rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
-          data-testid="add-customer-btn"
-        >
-          <Plus className="w-5 h-5" />
-          Add Customer
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={handleAddCustomer}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white font-medium rounded-xl shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
+            data-testid="add-customer-btn"
+          >
+            <Plus className="w-5 h-5" />
+            Add Customer
+          </button>
+        )}
       </div>
 
       {/* Filters */}

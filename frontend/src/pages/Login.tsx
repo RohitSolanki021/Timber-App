@@ -21,10 +21,10 @@ export default function Login() {
       await apiProxy.login({ email, password });
       const profile = await apiProxy.getMe();
       const role = String(profile?.role || "").toLowerCase();
-      const allowed = ["manager", "super admin"].includes(role);
+      const allowed = ["manager", "super admin", "admin"].includes(role);
       if (!allowed) {
         await apiProxy.logout();
-        setError("Only Manager or Super Admin accounts can access this admin app.");
+        setError("Only Manager, Admin, or Super Admin accounts can access this admin app.");
         return;
       }
       localStorage.setItem("profile", JSON.stringify(profile));

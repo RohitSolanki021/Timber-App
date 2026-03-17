@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   Package,
-  ChevronDown
+  ChevronDown,
+  UserCog
 } from "lucide-react";
 import { apiProxy } from "../apiProxy";
 
@@ -18,15 +19,24 @@ interface NavItem {
   to: string;
   icon: React.ElementType;
   label: string;
+  superAdminOnly?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/customers", icon: Users, label: "Customers" },
-  { to: "/orders", icon: ClipboardList, label: "Orders" },
-  { to: "/invoices", icon: FileText, label: "Invoices" },
-  { to: "/products", icon: Package, label: "Products" },
-];
+const getNavItems = (isSuperAdmin: boolean): NavItem[] => {
+  const items: NavItem[] = [
+    { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/customers", icon: Users, label: "Customers" },
+    { to: "/orders", icon: ClipboardList, label: "Orders" },
+    { to: "/invoices", icon: FileText, label: "Invoices" },
+    { to: "/products", icon: Package, label: "Products" },
+  ];
+  
+  if (isSuperAdmin) {
+    items.push({ to: "/users", icon: UserCog, label: "Staff", superAdminOnly: true });
+  }
+  
+  return items;
+};
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -42,6 +52,9 @@ export default function Layout() {
       return null;
     }
   })();
+
+  const isSuperAdmin = profile?.role?.toLowerCase() === 'super admin';
+  const navItems = getNavItems(isSuperAdmin);
 
   const handleLogout = async () => {
     await apiProxy.logout();
