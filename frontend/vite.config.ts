@@ -9,7 +9,7 @@ export default defineConfig(() => ({
     react(), 
     tailwindcss(),
     {
-      name: 'customer-portal-spa',
+      name: 'multi-portal-spa',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
           // Serve customer portal for /portal/* routes
@@ -18,6 +18,15 @@ export default defineConfig(() => ({
             if (fs.existsSync(portalIndexPath)) {
               res.setHeader('Content-Type', 'text/html');
               res.end(fs.readFileSync(portalIndexPath, 'utf-8'));
+              return;
+            }
+          }
+          // Serve sales portal for /sales/* routes
+          if (req.url?.startsWith('/sales') && !req.url.includes('.')) {
+            const salesIndexPath = path.resolve(__dirname, 'public/sales/index.html');
+            if (fs.existsSync(salesIndexPath)) {
+              res.setHeader('Content-Type', 'text/html');
+              res.end(fs.readFileSync(salesIndexPath, 'utf-8'));
               return;
             }
           }

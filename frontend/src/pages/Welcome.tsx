@@ -18,6 +18,13 @@ export default function Welcome() {
             Admin Login
           </button>
           <a
+            href="/sales/"
+            data-testid="sales-portal-btn"
+            className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl shadow-xl shadow-emerald-600/20 transition-all hover:scale-[1.02] active:scale-[0.98] text-center"
+          >
+            Sales Portal
+          </a>
+          <a
             href="/portal/"
             data-testid="customer-portal-btn"
             className="w-full py-4 bg-white text-primary font-bold rounded-2xl border-2 border-primary shadow-xl shadow-primary/10 transition-all hover:bg-primary/5 active:scale-[0.98] text-center"

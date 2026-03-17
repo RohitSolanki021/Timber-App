@@ -156,14 +156,28 @@ def init_demo_data():
     }
     db.users.insert_one(manager)
     
+    # Sales Person
+    sales_person = {
+        "email": "sales@naturalplylam.com",
+        "password": hash_password("sales123"),
+        "name": "Rahul Sales",
+        "role": "Sales Person",
+        "phone": "9876543220",
+        "approval_status": "Approved",
+        "pricing_type": 1,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    sales_result = db.users.insert_one(sales_person)
+    sales_person_id = str(sales_result.inserted_id)
+    
     customers = [
-        {"email": "customer1@example.com", "name": "ABC Furniture Works", "business_name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_name": "Manager User", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area, Mumbai, Maharashtra - 400001", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
-        {"email": "customer2@example.com", "name": "XYZ Interiors", "business_name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_name": "Manager User", "address": "456 Commercial Complex, Delhi - 110001", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
-        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "business_name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_name": "Manager User", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub, Bangalore - 560001", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
-        {"email": "customer4@example.com", "name": "Elite Woodworks", "business_name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_name": "Manager User", "address": "321 Artisan Lane, Chennai - 600001", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
-        {"email": "customer5@example.com", "name": "Premium Plyboards", "business_name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_name": "Manager User", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center, Hyderabad - 500001", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
-        {"email": "customer6@example.com", "name": "Classic Interiors", "business_name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": False, "pricing_type": 2, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_name": "Manager User", "address": "890 Design District, Pune - 411001", "city": "Pune", "state": "Maharashtra", "pincode": "411001", "notes": "Account deactivated - payment issues"},
-        {"email": "customer7@example.com", "name": "Royal Furnishings", "business_name": "Royal Furnishings", "contactPerson": "Robert Wilson", "phone": "9876543218", "role": "Customer", "approval_status": "Rejected", "is_active": False, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 0, "sales_person_name": "Manager User", "address": "234 Market Street, Kolkata - 700001", "city": "Kolkata", "state": "West Bengal", "pincode": "700001", "notes": "Rejected - incomplete documentation"},
+        {"email": "customer1@example.com", "name": "ABC Furniture Works", "business_name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area, Mumbai, Maharashtra - 400001", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
+        {"email": "customer2@example.com", "name": "XYZ Interiors", "business_name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "456 Commercial Complex, Delhi - 110001", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
+        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "business_name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub, Bangalore - 560001", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
+        {"email": "customer4@example.com", "name": "Elite Woodworks", "business_name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "321 Artisan Lane, Chennai - 600001", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
+        {"email": "customer5@example.com", "name": "Premium Plyboards", "business_name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center, Hyderabad - 500001", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
+        {"email": "customer6@example.com", "name": "Classic Interiors", "business_name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": False, "pricing_type": 2, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "890 Design District, Pune - 411001", "city": "Pune", "state": "Maharashtra", "pincode": "411001", "notes": "Account deactivated - payment issues"},
+        {"email": "customer7@example.com", "name": "Royal Furnishings", "business_name": "Royal Furnishings", "contactPerson": "Robert Wilson", "phone": "9876543218", "role": "Customer", "approval_status": "Rejected", "is_active": False, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 0, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "234 Market Street, Kolkata - 700001", "city": "Kolkata", "state": "West Bengal", "pincode": "700001", "notes": "Rejected - incomplete documentation"},
     ]
     for i, cust in enumerate(customers, 1):
         cust["id"] = i
@@ -185,11 +199,11 @@ def init_demo_data():
     db.products.insert_many(products)
     
     orders = [
-        {"id": "ORD-K9J2L4M1", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Dispatched", "amount": 10711.80, "grand_total": 10711.80, "order_date": "2024-01-15T09:15:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 48, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 36, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-001", "productName": "Oak Finish Trim", "name": "Oak Finish Trim", "quantity": 150, "unitPrice": 14.81, "price": 14.81, "unit": "ea"}], "images": []},
-        {"id": "ORD-A1B2C3D4", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Completed", "amount": 2500.00, "grand_total": 2500.00, "order_date": "2024-01-10T14:30:00Z", "paymentStatus": "Paid", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-003", "productName": "Teak Plywood", "name": "Teak Plywood", "quantity": 10, "unitPrice": 150.00, "price": 150.00, "unit": "ea"}, {"product_id": "TIM-002", "productName": "Pine Stud (2x4)", "name": "Pine Stud (2x4)", "quantity": 181, "unitPrice": 5.50, "price": 5.50, "unit": "ea"}], "images": []},
-        {"id": "ORD-X7Y8Z9W0", "customer_id": 3, "customerName": "Modern Cabinets Ltd", "status": "Created", "amount": 1250.00, "grand_total": 1250.00, "order_date": "2024-01-20T11:00:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-004", "productName": "MDF Board (1/4\")", "name": "MDF Board (1/4\")", "quantity": 50, "unitPrice": 18.50, "price": 18.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 5, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []},
-        {"id": "ORD-P5Q6R7S8", "customer_id": 5, "customerName": "Premium Plyboards", "status": "Approved", "amount": 3450.00, "grand_total": 3450.00, "order_date": "2024-01-18T16:45:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 30, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "TIM-003", "productName": "Cedar Decking", "name": "Cedar Decking", "quantity": 40, "unitPrice": 24.99, "price": 24.99, "unit": "ea"}], "images": []},
-        {"id": "ORD-M2N3O4P5", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Invoiced", "amount": 5250.00, "grand_total": 5250.00, "order_date": "2024-01-12T10:30:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 30, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 30, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []}
+        {"id": "ORD-K9J2L4M1", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Dispatched", "amount": 10711.80, "grand_total": 10711.80, "order_date": "2024-01-15T09:15:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 48, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 36, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-001", "productName": "Oak Finish Trim", "name": "Oak Finish Trim", "quantity": 150, "unitPrice": 14.81, "price": 14.81, "unit": "ea"}], "images": []},
+        {"id": "ORD-A1B2C3D4", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Completed", "amount": 2500.00, "grand_total": 2500.00, "order_date": "2024-01-10T14:30:00Z", "paymentStatus": "Paid", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-003", "productName": "Teak Plywood", "name": "Teak Plywood", "quantity": 10, "unitPrice": 150.00, "price": 150.00, "unit": "ea"}, {"product_id": "TIM-002", "productName": "Pine Stud (2x4)", "name": "Pine Stud (2x4)", "quantity": 181, "unitPrice": 5.50, "price": 5.50, "unit": "ea"}], "images": []},
+        {"id": "ORD-X7Y8Z9W0", "customer_id": 3, "customerName": "Modern Cabinets Ltd", "status": "Created", "amount": 1250.00, "grand_total": 1250.00, "order_date": "2024-01-20T11:00:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-004", "productName": "MDF Board (1/4\")", "name": "MDF Board (1/4\")", "quantity": 50, "unitPrice": 18.50, "price": 18.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 5, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []},
+        {"id": "ORD-P5Q6R7S8", "customer_id": 5, "customerName": "Premium Plyboards", "status": "Approved", "amount": 3450.00, "grand_total": 3450.00, "order_date": "2024-01-18T16:45:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 30, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "TIM-003", "productName": "Cedar Decking", "name": "Cedar Decking", "quantity": 40, "unitPrice": 24.99, "price": 24.99, "unit": "ea"}], "images": []},
+        {"id": "ORD-M2N3O4P5", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Invoiced", "amount": 5250.00, "grand_total": 5250.00, "order_date": "2024-01-12T10:30:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 30, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 30, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []}
     ]
     db.orders.insert_many(orders)
     
@@ -1084,3 +1098,405 @@ async def change_customer_password(body: dict = Body(...), payload: dict = Depen
     
     db.customers.update_one({"id": customer_id}, {"$set": {"password": hash_password(new_password)}})
     return {"success": True, "message": "Password changed successfully"}
+
+
+
+# ============ SALES PORTAL HELPER ============
+def get_sales_user_id_from_token(payload: dict) -> str:
+    """Extract sales user ID from JWT payload"""
+    user_id = payload.get("user_id", "")
+    role = payload.get("role", "")
+    if role not in ["Sales Person", "Manager", "Super Admin"]:
+        raise HTTPException(status_code=403, detail="Sales access required")
+    return user_id
+
+# ============ SALES DASHBOARD ============
+@app.get("/api/sales/dashboard")
+async def sales_dashboard(payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    
+    # Get sales person's assigned customers
+    assigned_customers = list(db.customers.find({"sales_person_id": user_id}, {"_id": 0}))
+    customer_ids = [c["id"] for c in assigned_customers]
+    
+    # Calculate metrics
+    orders = list(db.orders.find({"customer_id": {"$in": customer_ids}}, {"_id": 0}))
+    invoices = list(db.invoices.find({"customer_id": {"$in": customer_ids}}, {"_id": 0}))
+    
+    # Monthly sales (current month)
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_orders = [o for o in orders if o.get("order_date", "") >= month_start.isoformat()]
+    monthly_sales = sum(o.get("amount", 0) or o.get("grand_total", 0) for o in monthly_orders)
+    
+    # New orders this week
+    week_ago = (now - timedelta(days=7)).isoformat()
+    new_orders_week = len([o for o in orders if o.get("order_date", "") >= week_ago])
+    
+    # Pending orders
+    pending_orders = [o for o in orders if o.get("status") not in ["Completed", "Cancelled", "Delivered"]]
+    
+    # Outstanding balance
+    total_outstanding = sum(c.get("outstanding_balance", 0) for c in assigned_customers)
+    
+    # Due invoices
+    due_invoices = [i for i in invoices if i.get("status") in ["Pending", "Overdue", "Due"]]
+    
+    return {
+        "monthly_sales": monthly_sales,
+        "new_orders_week": new_orders_week,
+        "assigned_customers": len(assigned_customers),
+        "pending_orders_count": len(pending_orders),
+        "total_outstanding": total_outstanding,
+        "due_invoices_count": len(due_invoices)
+    }
+
+# ============ SALES CUSTOMERS ============
+@app.get("/api/sales/customers")
+async def get_sales_customers(
+    page: int = 1,
+    per_page: int = 10,
+    search: str = "",
+    status: str = "",
+    payload: dict = Depends(verify_token)
+):
+    user_id = get_sales_user_id_from_token(payload)
+    skip = (page - 1) * per_page
+    
+    query: dict = {"sales_person_id": user_id}
+    if status:
+        if status.lower() == "approved":
+            query["approval_status"] = "Approved"
+        elif status.lower() == "pending":
+            query["approval_status"] = "Pending"
+    
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}}
+        ]
+    
+    total = db.customers.count_documents(query)
+    customers = list(db.customers.find(query, {"_id": 0, "password": 0}).skip(skip).limit(per_page))
+    
+    return {
+        "data": customers,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/sales/customers/{customer_id}")
+async def get_sales_customer(customer_id: int, payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id}, {"_id": 0, "password": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer
+
+@app.post("/api/sales/customers")
+async def create_sales_customer(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    
+    # Check for duplicate email
+    if db.customers.find_one({"email": body.get("email")}):
+        raise HTTPException(status_code=400, detail="Customer with this email already exists")
+    
+    # Get sales person name
+    sales_user = db.users.find_one({"_id": ObjectId(user_id)})
+    sales_person_name = sales_user.get("name", "Sales Person") if sales_user else "Sales Person"
+    
+    # Generate new customer ID
+    last_customer = db.customers.find_one(sort=[("id", -1)])
+    new_id = (last_customer["id"] + 1) if last_customer else 1
+    
+    customer = {
+        "id": new_id,
+        "email": body.get("email"),
+        "name": body.get("name") or body.get("business_name"),
+        "business_name": body.get("business_name") or body.get("name"),
+        "contactPerson": body.get("contactPerson") or body.get("contact_person"),
+        "phone": body.get("phone"),
+        "address": body.get("address", ""),
+        "city": body.get("city", ""),
+        "state": body.get("state", ""),
+        "pincode": body.get("pincode", ""),
+        "gst_number": body.get("gst_number") or body.get("gstin", ""),
+        "role": "Customer",
+        "approval_status": "Pending",
+        "is_active": True,
+        "pricing_type": int(body.get("pricing_type", 1)),
+        "outstanding_balance": 0,
+        "credit_limit": int(body.get("credit_limit", 25000)),
+        "sales_person_id": user_id,
+        "sales_person_name": sales_person_name,
+        "password": hash_password(body.get("password", "customer123")),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.customers.insert_one(customer)
+    del customer["password"]
+    customer.pop("_id", None)
+    
+    return {"success": True, "message": "Customer created successfully", "data": customer}
+
+# ============ SALES CART ============
+@app.get("/api/sales/cart")
+async def get_sales_cart(customer_id: Optional[int] = None, payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    
+    if not customer_id:
+        return {"items": [], "total": 0, "customer": None}
+    
+    # Verify customer belongs to this sales person
+    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id}, {"_id": 0, "password": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found or not assigned to you")
+    
+    cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id}, {"_id": 0})
+    if not cart:
+        return {"items": [], "total": 0, "customer": customer, "pricing_type": customer.get("pricing_type", 1)}
+    
+    items = cart.get("items", [])
+    total = sum(item.get("price", 0) * item.get("quantity", 0) for item in items)
+    
+    return {
+        "items": items,
+        "total": total,
+        "customer": customer,
+        "pricing_type": customer.get("pricing_type", 1)
+    }
+
+@app.post("/api/sales/cart")
+async def add_to_sales_cart(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    customer_id = body.get("customer_id")
+    product_id = body.get("product_id")
+    quantity = int(body.get("quantity", 1))
+    
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="Customer ID required")
+    
+    # Verify customer
+    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found or not assigned to you")
+    
+    # Get product
+    product = db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Get customer's tier price
+    pricing_type = str(customer.get("pricing_type", 1))
+    price = product.get("pricing_rates", {}).get(pricing_type, product.get("price", 0))
+    
+    # Get or create cart
+    cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id})
+    if not cart:
+        cart = {"sales_person_id": user_id, "customer_id": customer_id, "items": []}
+        db.sales_carts.insert_one(cart)
+    
+    items = cart.get("items", [])
+    
+    # Update or add item
+    found = False
+    for item in items:
+        if item["product_id"] == product_id:
+            item["quantity"] = quantity
+            item["price"] = float(price)
+            found = True
+            break
+    
+    if not found:
+        items.append({
+            "product_id": product_id,
+            "name": product.get("name"),
+            "quantity": quantity,
+            "price": float(price),
+            "unit": product.get("priceUnit", "ea")
+        })
+    
+    db.sales_carts.update_one(
+        {"sales_person_id": user_id, "customer_id": customer_id},
+        {"$set": {"items": items}},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Cart updated"}
+
+@app.delete("/api/sales/cart")
+async def delete_sales_cart(
+    product_id: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    payload: dict = Depends(verify_token)
+):
+    user_id = get_sales_user_id_from_token(payload)
+    
+    if product_id and customer_id:
+        # Remove specific item
+        cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id})
+        if cart:
+            items = [item for item in cart.get("items", []) if item["product_id"] != product_id]
+            db.sales_carts.update_one(
+                {"sales_person_id": user_id, "customer_id": customer_id},
+                {"$set": {"items": items}}
+            )
+        return {"success": True, "message": "Item removed"}
+    elif customer_id:
+        # Clear cart for customer
+        db.sales_carts.delete_one({"sales_person_id": user_id, "customer_id": customer_id})
+        return {"success": True, "message": "Cart cleared"}
+    else:
+        return {"success": False, "message": "Customer ID required"}
+
+# ============ SALES CHECKOUT ============
+@app.post("/api/sales/checkout")
+async def sales_checkout(body: dict = Body(...), payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    customer_id = body.get("customer_id")
+    
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="Customer ID required")
+    
+    # Get customer
+    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found or not assigned to you")
+    
+    if customer.get("approval_status") != "Approved":
+        raise HTTPException(status_code=403, detail="Customer is not approved yet")
+    
+    # Get cart
+    cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id})
+    if not cart or not cart.get("items"):
+        raise HTTPException(status_code=400, detail="Cart is empty")
+    
+    items = cart.get("items", [])
+    total = sum(item["price"] * item["quantity"] for item in items)
+    
+    # Get sales person name
+    sales_user = db.users.find_one({"_id": ObjectId(user_id)})
+    sales_person_name = sales_user.get("name", "Sales Person") if sales_user else "Sales Person"
+    
+    # Create order
+    order_id = f"ORD-{secrets.token_hex(4).upper()}"
+    order = {
+        "id": order_id,
+        "customer_id": customer_id,
+        "customerName": customer.get("name"),
+        "status": "Created",
+        "amount": total,
+        "grand_total": total,
+        "order_date": datetime.now(timezone.utc).isoformat(),
+        "paymentStatus": "Credit",
+        "sales_person_id": user_id,
+        "salesPerson": sales_person_name,
+        "shipping_address": customer.get("address", ""),
+        "pricing_type": customer.get("pricing_type", 1),
+        "items": [
+            {
+                "product_id": item["product_id"],
+                "productName": item["name"],
+                "name": item["name"],
+                "quantity": item["quantity"],
+                "unitPrice": item["price"],
+                "price": item["price"],
+                "unit": item.get("unit", "ea")
+            }
+            for item in items
+        ],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.orders.insert_one(order)
+    
+    # Clear cart
+    db.sales_carts.delete_one({"sales_person_id": user_id, "customer_id": customer_id})
+    
+    return {"success": True, "order_id": order_id, "message": "Order placed successfully"}
+
+# ============ SALES ORDERS ============
+@app.get("/api/sales/orders")
+async def get_sales_orders(
+    page: int = 1,
+    per_page: int = 10,
+    status: str = "",
+    payload: dict = Depends(verify_token)
+):
+    user_id = get_sales_user_id_from_token(payload)
+    skip = (page - 1) * per_page
+    
+    query: dict = {"sales_person_id": user_id}
+    if status:
+        query["status"] = status
+    
+    total = db.orders.count_documents(query)
+    orders = list(db.orders.find(query, {"_id": 0}).sort("order_date", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": orders,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/sales/orders/{order_id}")
+async def get_sales_order(order_id: str, payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    order = db.orders.find_one({"id": order_id, "sales_person_id": user_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+# ============ SALES INVOICES ============
+@app.get("/api/sales/invoices")
+async def get_sales_invoices(
+    page: int = 1,
+    per_page: int = 10,
+    status: str = "",
+    payload: dict = Depends(verify_token)
+):
+    user_id = get_sales_user_id_from_token(payload)
+    skip = (page - 1) * per_page
+    
+    # Get sales person's customer IDs
+    customers = list(db.customers.find({"sales_person_id": user_id}, {"id": 1}))
+    customer_ids = [c["id"] for c in customers]
+    
+    query: dict = {"customer_id": {"$in": customer_ids}}
+    if status:
+        query["status"] = status
+    
+    total = db.invoices.count_documents(query)
+    invoices = list(db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": invoices,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/sales/invoices/{invoice_id}")
+async def get_sales_invoice(invoice_id: str, payload: dict = Depends(verify_token)):
+    user_id = get_sales_user_id_from_token(payload)
+    
+    # Get sales person's customer IDs
+    customers = list(db.customers.find({"sales_person_id": user_id}, {"id": 1}))
+    customer_ids = [c["id"] for c in customers]
+    
+    invoice = db.invoices.find_one({"id": invoice_id, "customer_id": {"$in": customer_ids}}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
