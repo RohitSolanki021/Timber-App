@@ -1,12 +1,13 @@
 # Natural Plylam Admin Panel - PRD
 
 ## Original Problem Statement
-Import PHP-Admin-Panel-Natural-Plylam GitHub repository and create a fully functional admin panel with:
-- Full audit of existing codebase
-- Check all connections (buttons, forms, tables, filters, search, pagination, CRUD, navigation, API calls)
-- Fix broken, incomplete, or dummy parts
-- Restructure professionally with clean folder structure
-- Upgrade UI to be more professional and advanced
+1. Import PHP-Admin-Panel-Natural-Plylam GitHub repository
+2. Full audit of existing codebase
+3. Fix broken, incomplete, or dummy parts
+4. Add complete Customer CRUD management
+5. Create reusable CRUD architecture with professional components
+6. Improve UX with loading states, toasts, confirmation dialogs
+7. Keep code modular and scalable
 
 ## Architecture
 - **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
@@ -22,104 +23,120 @@ Import PHP-Admin-Panel-Natural-Plylam GitHub repository and create a fully funct
 ## Core Requirements (Static)
 - [x] User authentication (login/logout)
 - [x] Dashboard with KPIs
-- [x] Customer management (list, approve pending)
+- [x] Customer management (FULL CRUD)
 - [x] Order management (list, filter, status updates)
 - [x] Invoice management (list, filter, mark as paid)
 - [x] Product catalog
 - [x] Profile management
 
-## Implemented Features (March 17, 2026)
+## Implemented Features
 
-### Backend (FastAPI)
-- JWT authentication with secure password hashing
-- RESTful API endpoints for all resources
-- MongoDB integration for data persistence
-- Demo data seeding on startup
-- Health check endpoint
+### Phase 1 (March 17, 2026) - Initial Setup
+- FastAPI backend with MongoDB
+- React frontend with Vite
+- JWT authentication
+- Basic admin panel layout
+- Dashboard, Orders, Invoices, Products pages
 
-### Frontend (React/TypeScript)
-- Professional admin panel layout with sidebar navigation
-- Responsive design (desktop + mobile)
-- Dashboard with:
-  - KPI cards (Awaiting Approval, Total Orders, Due Invoices, Completed)
-  - Latest Orders section
-  - Quick Actions panel
-  - Order Status Summary
-- Customers page with:
-  - Table view with search
-  - Approve pending customers functionality
-  - Pagination
-- Orders page with:
-  - Status filters (All, Created, Approved, Invoiced, Dispatched, Completed, Cancelled)
-  - Search functionality
-  - Clickable rows navigation
-  - Pagination
-- Invoices page with:
-  - Status filters (All, Paid, Pending)
-  - Search functionality
-  - Clickable rows navigation
-  - Link to associated order
-- Order Detail page with workflow actions
-- Invoice Detail page with mark as paid
-- Products page with category filters
-- Profile page with password change
+### Phase 2 (March 17, 2026) - Customer CRUD & Reusable Components
+
+#### Backend Enhancements
+- `GET /api/customers` - List with search, filter, sort, pagination
+- `GET /api/customers/{id}` - Get single customer with orders/invoices
+- `POST /api/customers` - Create new customer
+- `PUT /api/customers/{id}` - Update customer
+- `DELETE /api/customers/{id}?hard_delete=bool` - Soft/hard delete
+- `POST /api/admin?action=approve_customer` - Approve pending
+- `POST /api/admin?action=reject_customer` - Reject customer
+- `POST /api/admin?action=toggle_customer_status` - Activate/deactivate
+
+#### Reusable UI Components Created
+1. **Toast Notifications** (`/src/components/ui/Toast.tsx`)
+   - Success, error, warning, info variants
+   - Auto-dismiss with configurable duration
+   - Context-based API for easy use
+
+2. **Confirm Dialog** (`/src/components/ui/ConfirmDialog.tsx`)
+   - Danger, warning, info variants
+   - Loading state support
+   - Customizable text
+
+3. **SlideOver Drawer** (`/src/components/ui/SlideOver.tsx`)
+   - Multiple sizes (sm, md, lg, xl)
+   - Header with title/subtitle
+   - Footer for action buttons
+   - Smooth animations
+
+4. **DataTable** (`/src/components/ui/DataTable.tsx`)
+   - Sortable columns
+   - Pagination with first/last page
+   - Loading state
+   - Empty state with custom icon/message
+   - Row click handler
+   - Responsive
+
+#### Customer Management Features
+- **List View**: Search, status filters, sort by column, pagination
+- **Add Customer**: SlideOver form with validation
+- **Edit Customer**: Pre-filled form with all fields
+- **View Details**: Full customer profile with orders history
+- **Status Actions**: Approve, reject, activate, deactivate
+- **Delete Options**: Soft delete (archive) or hard delete
+
+#### Customer Form Fields
+- Company Name, GST Number
+- Contact Person, Phone, Email
+- Street Address, City, State, Pincode
+- Pricing Tier (1-3), Credit Limit
+- Notes, Active Status
 
 ### Files Changed
-- `/app/frontend/src/App.tsx` - Routes configuration
-- `/app/frontend/src/apiService.ts` - API service layer
-- `/app/frontend/src/components/Layout.tsx` - Admin panel layout
-- `/app/frontend/src/pages/Dashboard.tsx` - Dashboard page
-- `/app/frontend/src/pages/Customers.tsx` - Customers management
-- `/app/frontend/src/pages/Orders.tsx` - Orders management
-- `/app/frontend/src/pages/Invoices.tsx` - Invoices management
-- `/app/frontend/src/pages/Profile.tsx` - Profile settings
-- `/app/frontend/src/types.ts` - TypeScript types
-- `/app/backend/server.py` - FastAPI backend
+- `/app/backend/server.py` - Complete CRUD endpoints
+- `/app/frontend/src/App.tsx` - Routes, ToastProvider
+- `/app/frontend/src/apiService.ts` - API methods
+- `/app/frontend/src/types.ts` - Type definitions
+- `/app/frontend/src/pages/Customers.tsx` - Full CRUD page
+- `/app/frontend/src/pages/CustomerDetail.tsx` - Detail page
+- `/app/frontend/src/components/ui/` - Reusable components
 
-### Removed Unused Files
-- Cart.tsx, Checkout.tsx, Register.tsx (not needed for admin panel)
-- CartContext.tsx, ApiModeToggle.tsx, apiToggle.ts, api.ts
-
-## Issues Found & Fixed
-
-### Critical
-1. ✅ Missing CartItem type definition
-2. ✅ No backend API server (PHP was incompatible)
-3. ✅ Mobile-first layout not suitable for admin panel
-4. ✅ Unused cart/checkout functionality cluttering codebase
-5. ✅ parseFloat used on number types in InvoiceDetail
-
-### Medium
-1. ✅ Table rows not clickable for navigation
-2. ✅ Inconsistent data-testid attributes
-3. ✅ Missing loading and empty states
-
-### Low
-1. ✅ Unused variable in backend (admin_result)
-
-## Prioritized Backlog
-
-### P0 (Critical)
-- All done
-
-### P1 (High)
-- Add customer editing functionality
-- Add order creation for admin
-- Add product management (CRUD)
-- Implement invoice generation from orders
-
-### P2 (Medium)
-- Add reports/analytics dashboard
-- Implement search across all entities
-- Add export to Excel/PDF functionality
-- Add notifications system
+## Testing Results
+- Backend: 100% pass rate
+- Frontend: 100% pass rate
+- All CRUD operations verified
+- All UI components working
 
 ## Credentials for Testing
 - **Admin**: admin@naturalplylam.com / admin123
 - **Manager**: manager@naturalplylam.com / manager123
 
+## Prioritized Backlog
+
+### P0 (Critical) - DONE
+- [x] Complete Customer CRUD
+- [x] Reusable components
+- [x] Toast notifications
+- [x] Confirm dialogs
+
+### P1 (High)
+- [ ] Order creation for admin
+- [ ] Product management CRUD
+- [ ] Invoice generation from orders
+- [ ] Customer import/export (CSV)
+
+### P2 (Medium)
+- [ ] Reports/analytics dashboard
+- [ ] Email notifications
+- [ ] Audit log for actions
+- [ ] User roles management
+
+### P3 (Low)
+- [ ] Dark mode
+- [ ] Print invoice PDF
+- [ ] Bulk actions on customers/orders
+- [ ] Customer portal
+
 ## Next Tasks
-1. Implement customer editing
-2. Add product management CRUD
-3. Add invoice generation workflow
-4. Implement analytics/reports
+1. Add Product CRUD (similar pattern to customers)
+2. Order creation workflow for admin
+3. Invoice generation from completed orders
+4. Customer import from CSV
