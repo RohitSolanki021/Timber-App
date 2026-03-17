@@ -287,6 +287,125 @@ async def get_products(
     products = list(db.products.find(query, {"_id": 0}))
     return {"data": products, "products": products}
 
+def get_next_product_id(category: str) -> str:
+    prefix = "PLY" if category == "Plywood" else "TIM"
+    existing = list(db.products.find({"id": {"$regex": f"^{prefix}-"}}, {"id": 1}))
+    if not existing:
+        return f"{prefix}-001"
+    max_num = 0
+    for p in existing:
+        try:
+            num = int(p["id"].split("-")[1])
+            if num > max_num:
+                max_num = num
+        except (ValueError, IndexError, KeyError):
+            pass
+    return f"{prefix}-{str(max_num + 1).zfill(3)}"
+
+@app.get("/api/products/{product_id}")
+async def get_product(
+    product_id: str,
+    payload: dict = Depends(verify_token)
+):
+    product = db.products.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"data": product}
+
+@app.post("/api/products")
+async def create_product(
+    body: dict = Body(...),
+    payload: dict = Depends(verify_token)
+):
+    if not body.get("name") or not body.get("category"):
+        raise HTTPException(status_code=400, detail="Name and category are required")
+    
+    # Check if product with same name exists
+    existing = db.products.find_one({"name": body.get("name")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Product with this name already exists")
+    
+    product_id = body.get("id") or get_next_product_id(body.get("category", "Plywood"))
+    
+    product = {
+        "id": product_id,
+        "name": body.get("name"),
+        "category": body.get("category"),
+        "price": float(body.get("price", 0)),
+        "priceUnit": body.get("priceUnit", "ea"),
+        "stock_status": body.get("stock_status", "in_stock"),
+        "stock_quantity": int(body.get("stock_quantity", 0)),
+        "description": body.get("description", ""),
+        "primary_image": body.get("primary_image", ""),
+        "pricing_rates": body.get("pricing_rates", {
+            "1": float(body.get("price", 0)),
+            "2": float(body.get("price", 0)) * 0.95,
+            "3": float(body.get("price", 0)) * 0.90
+        }),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.products.insert_one(product)
+    del product["_id"]
+    
+    return {"success": True, "message": "Product created successfully", "data": product}
+
+@app.put("/api/products/{product_id}")
+async def update_product(
+    product_id: str,
+    body: dict = Body(...),
+    payload: dict = Depends(verify_token)
+):
+    existing = db.products.find_one({"id": product_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check name uniqueness if name is being updated
+    if body.get("name") and body.get("name") != existing.get("name"):
+        name_exists = db.products.find_one({"name": body.get("name"), "id": {"$ne": product_id}})
+        if name_exists:
+            raise HTTPException(status_code=400, detail="Product with this name already exists")
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    allowed_fields = ["name", "category", "price", "priceUnit", "stock_status", 
+                      "stock_quantity", "description", "primary_image", "pricing_rates"]
+    
+    for field in allowed_fields:
+        if field in body:
+            if field == "price":
+                update_data[field] = float(body[field])
+            elif field == "stock_quantity":
+                update_data[field] = int(body[field])
+            else:
+                update_data[field] = body[field]
+    
+    db.products.update_one({"id": product_id}, {"$set": update_data})
+    
+    updated = db.products.find_one({"id": product_id}, {"_id": 0})
+    return {"success": True, "message": "Product updated successfully", "data": updated}
+
+@app.delete("/api/products/{product_id}")
+async def delete_product(
+    product_id: str,
+    payload: dict = Depends(verify_token)
+):
+    existing = db.products.find_one({"id": product_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check if product is used in any orders
+    orders_with_product = db.orders.count_documents({"items.product_id": product_id})
+    if orders_with_product > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete product used in {orders_with_product} orders"
+        )
+    
+    db.products.delete_one({"id": product_id})
+    return {"success": True, "message": "Product deleted successfully"}
+
 # ============ ORDERS ROUTES ============
 @app.get("/api/orders")
 async def get_orders_endpoint(
@@ -316,6 +435,32 @@ async def get_invoices_endpoint(
     
     invoices = list(db.invoices.find({}, {"_id": 0}).sort("issue_date", -1))
     return invoices
+
+@app.put("/api/invoices/{invoice_id}")
+async def update_invoice(
+    invoice_id: str,
+    body: dict = Body(...),
+    payload: dict = Depends(verify_token)
+):
+    existing = db.invoices.find_one({"id": invoice_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    allowed_fields = ["status", "due_date", "notes"]
+    valid_statuses = ["Pending", "Paid", "Overdue", "Cancelled", "Partially Paid"]
+    
+    for field in allowed_fields:
+        if field in body:
+            if field == "status" and body[field] not in valid_statuses:
+                raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+            update_data[field] = body[field]
+    
+    db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    
+    updated = db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return {"success": True, "message": "Invoice updated successfully", "data": updated}
 
 # ============ CUSTOMERS CRUD ROUTES ============
 @app.get("/api/customers")

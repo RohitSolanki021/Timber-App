@@ -84,6 +84,19 @@ export interface CustomerFormData {
   is_active?: boolean;
 }
 
+export interface ProductFormData {
+  id?: string;
+  name: string;
+  category: string;
+  price: number;
+  priceUnit?: string;
+  stock_status?: string;
+  stock_quantity?: number;
+  description?: string;
+  primary_image?: string;
+  pricing_rates?: Record<string, number>;
+}
+
 export interface CustomerDetail extends Customer {
   gst_number?: string;
   address?: string;
@@ -147,6 +160,31 @@ export const apiService = {
     return request(`${API_BASE}/products${query ? '?' + query : ''}`);
   },
 
+  async getProduct(productId: string): Promise<Product> {
+    const res = await request(`${API_BASE}/products/${productId}`);
+    return res?.data || res;
+  },
+
+  async createProduct(data: ProductFormData): Promise<{ success: boolean; message: string; data: Product }> {
+    return request(`${API_BASE}/products`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateProduct(productId: string, data: Partial<ProductFormData>): Promise<{ success: boolean; message: string; data: Product }> {
+    return request(`${API_BASE}/products/${productId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async deleteProduct(productId: string): Promise<{ success: boolean; message: string }> {
+    return request(`${API_BASE}/products/${productId}`, {
+      method: 'DELETE'
+    });
+  },
+
   // Orders
   async createOrder(items: Array<{ product_id: string; quantity: number }>) {
     return request(`${API_BASE}/orders`, {
@@ -185,6 +223,13 @@ export const apiService = {
   async getInvoice(id: string): Promise<Invoice> {
     const res = await request(`${API_BASE}/invoices?id=${id}`);
     return res?.data || res;
+  },
+
+  async updateInvoice(invoiceId: string, data: { status?: string; due_date?: string; notes?: string }): Promise<{ success: boolean; message: string; data: Invoice }> {
+    return request(`${API_BASE}/invoices/${invoiceId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
   },
 
   // Profile
