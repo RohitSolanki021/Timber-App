@@ -1,5 +1,6 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ToastProvider } from "./components/ui/Toast";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -8,6 +9,7 @@ import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 import Invoices from "./pages/Invoices";
 import Customers from "./pages/Customers";
+import CustomerDetail from "./pages/CustomerDetail";
 import InvoiceDetail from "./pages/InvoiceDetail";
 import Profile from "./pages/Profile";
 import Login from "./pages/Login";
@@ -50,28 +52,31 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<Welcome />} />
-        <Route path="/login" element={<Login />} />
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<Welcome />} />
+          <Route path="/login" element={<Login />} />
 
-        {/* Protected Admin Routes */}
-        <Route element={<AdminRoute><Layout /></AdminRoute>}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/customers" element={<Customers />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/order/:id" element={<OrderDetail />} />
-          <Route path="/invoices" element={<Invoices />} />
-          <Route path="/invoice/:id" element={<InvoiceDetail />} />
-          <Route path="/profile" element={<Profile />} />
-        </Route>
+          {/* Protected Admin Routes */}
+          <Route element={<AdminRoute><Layout /></AdminRoute>}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/customer/:id" element={<CustomerDetail />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/order/:id" element={<OrderDetail />} />
+            <Route path="/invoices" element={<Invoices />} />
+            <Route path="/invoice/:id" element={<InvoiceDetail />} />
+            <Route path="/profile" element={<Profile />} />
+          </Route>
 
-        {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+          {/* Catch-all redirect */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }

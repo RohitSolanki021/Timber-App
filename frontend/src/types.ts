@@ -107,12 +107,23 @@ export interface Customer {
   contactPerson?: string;
   phone?: string;
   email?: string;
+  gst_number?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  outstanding_balance?: number;
   outstandingBalance?: number | string;
+  credit_limit?: number;
   pricing_type?: number;
   status?: string;
   approval_status?: string;
+  is_active?: boolean;
+  notes?: string;
   sales_person_id?: number;
   sales_person_name?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface CartItem {

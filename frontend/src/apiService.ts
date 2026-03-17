@@ -8,7 +8,6 @@ const API_BASE = (() => {
   if (configured) {
     return configured.endsWith('/') ? configured.slice(0, -1) : configured;
   }
-  // Fallback to window location for same-origin API
   return `${window.location.origin}/api`;
 })();
 
@@ -43,8 +42,14 @@ async function request(url: string, options: RequestInit = {}) {
 
   const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(errorText || `HTTP ${res.status}`);
+    let errorMessage = `HTTP ${res.status}`;
+    try {
+      const errorData = await res.json();
+      errorMessage = errorData.detail || errorData.message || errorMessage;
+    } catch {
+      // Ignore parse errors
+    }
+    throw new Error(errorMessage);
   }
   return res.json();
 }
@@ -61,6 +66,41 @@ const normalizeListResponse = <T>(payload: any): PaginatedList<T> => ({
   data: extractListData<T>(payload),
   pagination: payload?.pagination || null
 });
+
+export interface CustomerFormData {
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  gst_number?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  pricing_type?: number;
+  credit_limit?: number;
+  notes?: string;
+  approval_status?: string;
+  is_active?: boolean;
+}
+
+export interface CustomerDetail extends Customer {
+  gst_number?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  credit_limit?: number;
+  notes?: string;
+  is_active?: boolean;
+  outstanding_balance?: number;
+  created_at?: string;
+  updated_at?: string;
+  orders?: Order[];
+  invoices?: Invoice[];
+  total_orders?: number;
+  total_invoices?: number;
+}
 
 export const apiService = {
   // Auth
@@ -173,17 +213,56 @@ export const apiService = {
     });
   },
 
-  // Admin - customers
+  // ============ CUSTOMERS CRUD ============
   async getCustomers(params: Record<string, any> = {}): Promise<PaginatedList<Customer>> {
     const query = new URLSearchParams({ resource: "customers", ...params }).toString();
     const res = await request(`${API_BASE}/admin?${query}`);
     return normalizeListResponse<Customer>(res);
   },
 
+  async getCustomer(customerId: number): Promise<CustomerDetail> {
+    const res = await request(`${API_BASE}/customers/${customerId}`);
+    return res?.data || res;
+  },
+
+  async createCustomer(data: CustomerFormData): Promise<{ success: boolean; message: string; data: Customer }> {
+    return request(`${API_BASE}/customers`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async updateCustomer(customerId: number, data: Partial<CustomerFormData>): Promise<{ success: boolean; message: string; data: Customer }> {
+    return request(`${API_BASE}/customers/${customerId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  async deleteCustomer(customerId: number, hardDelete: boolean = false): Promise<{ success: boolean; message: string }> {
+    return request(`${API_BASE}/customers/${customerId}?hard_delete=${hardDelete}`, {
+      method: 'DELETE'
+    });
+  },
+
   async approveCustomer(customer_id: number) {
     return request(`${API_BASE}/admin?action=approve_customer`, {
       method: 'POST',
       body: JSON.stringify({ customer_id })
+    });
+  },
+
+  async rejectCustomer(customer_id: number, reason?: string) {
+    return request(`${API_BASE}/admin?action=reject_customer`, {
+      method: 'POST',
+      body: JSON.stringify({ customer_id, reason })
+    });
+  },
+
+  async toggleCustomerStatus(customer_id: number, is_active: boolean) {
+    return request(`${API_BASE}/admin?action=toggle_customer_status`, {
+      method: 'POST',
+      body: JSON.stringify({ customer_id, is_active })
     });
   },
 

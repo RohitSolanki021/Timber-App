@@ -1,14 +1,15 @@
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING, DESCENDING
 from bson import ObjectId
 import os
 import jwt
 import hashlib
 import secrets
+import re
 
 app = FastAPI(title="Natural Plylam Admin API")
 
@@ -59,6 +60,10 @@ def serialize_doc(doc):
     doc["id"] = str(doc.pop("_id", ""))
     return doc
 
+def get_next_customer_id():
+    max_id = db.customers.find_one(sort=[("id", -1)])
+    return (max_id["id"] + 1) if max_id and "id" in max_id else 1
+
 # Pydantic Models
 class LoginRequest(BaseModel):
     email: str
@@ -71,6 +76,36 @@ class RegisterRequest(BaseModel):
     phone: str
     email: str
     password: str
+
+class CustomerCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    contactPerson: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., min_length=1)
+    phone: str = Field(..., min_length=1, max_length=20)
+    gst_number: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    pricing_type: int = Field(default=1, ge=1, le=5)
+    credit_limit: Optional[float] = 0
+    notes: Optional[str] = None
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    contactPerson: Optional[str] = Field(None, min_length=1, max_length=100)
+    email: Optional[str] = None
+    phone: Optional[str] = Field(None, min_length=1, max_length=20)
+    gst_number: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    pricing_type: Optional[int] = Field(None, ge=1, le=5)
+    credit_limit: Optional[float] = None
+    notes: Optional[str] = None
+    approval_status: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class UserResponse(BaseModel):
     id: str
@@ -94,11 +129,9 @@ class ApproveCustomerRequest(BaseModel):
 
 # Initialize demo data
 def init_demo_data():
-    # Check if data already exists
     if db.users.count_documents({}) > 0:
         return
     
-    # Create admin user
     admin = {
         "email": "admin@naturalplylam.com",
         "password": hash_password("admin123"),
@@ -109,9 +142,8 @@ def init_demo_data():
         "pricing_type": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    admin_result = db.users.insert_one(admin)  # noqa: F841
+    db.users.insert_one(admin)
     
-    # Create manager user
     manager = {
         "email": "manager@naturalplylam.com",
         "password": hash_password("manager123"),
@@ -124,21 +156,22 @@ def init_demo_data():
     }
     db.users.insert_one(manager)
     
-    # Create sample customers
     customers = [
-        {"email": "customer1@example.com", "name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "pricing_type": 2, "outstanding_balance": 15000, "sales_person_name": "Manager User"},
-        {"email": "customer2@example.com", "name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "pricing_type": 1, "outstanding_balance": 0, "sales_person_name": "Manager User"},
-        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "pricing_type": 3, "outstanding_balance": 25000, "sales_person_name": "Manager User"},
-        {"email": "customer4@example.com", "name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "pricing_type": 1, "outstanding_balance": 0, "sales_person_name": "Manager User"},
-        {"email": "customer5@example.com", "name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "pricing_type": 2, "outstanding_balance": 8500, "sales_person_name": "Manager User"},
+        {"email": "customer1@example.com", "name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_name": "Manager User", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
+        {"email": "customer2@example.com", "name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_name": "Manager User", "address": "456 Commercial Complex", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
+        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_name": "Manager User", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
+        {"email": "customer4@example.com", "name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_name": "Manager User", "address": "321 Artisan Lane", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
+        {"email": "customer5@example.com", "name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_name": "Manager User", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
+        {"email": "customer6@example.com", "name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": False, "pricing_type": 2, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_name": "Manager User", "address": "890 Design District", "city": "Pune", "state": "Maharashtra", "pincode": "411001", "notes": "Account deactivated - payment issues"},
+        {"email": "customer7@example.com", "name": "Royal Furnishings", "contactPerson": "Robert Wilson", "phone": "9876543218", "role": "Customer", "approval_status": "Rejected", "is_active": False, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 0, "sales_person_name": "Manager User", "address": "234 Market Street", "city": "Kolkata", "state": "West Bengal", "pincode": "700001", "notes": "Rejected - incomplete documentation"},
     ]
     for i, cust in enumerate(customers, 1):
         cust["id"] = i
         cust["password"] = hash_password("customer123")
         cust["created_at"] = datetime.now(timezone.utc).isoformat()
+        cust["updated_at"] = datetime.now(timezone.utc).isoformat()
     db.customers.insert_many(customers)
     
-    # Create sample products
     products = [
         {"id": "PLY-001", "name": "Birch Veneer (3/4\")", "category": "Plywood", "price": 85.00, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 100, "description": "High-quality birch veneer plywood.", "pricing_rates": {"1": 85, "2": 80, "3": 75}},
         {"id": "PLY-002", "name": "Marine Plywood (1/2\")", "category": "Plywood", "price": 122.50, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 50, "description": "Water-resistant marine grade plywood.", "pricing_rates": {"1": 122.50, "2": 115, "3": 110}},
@@ -151,166 +184,30 @@ def init_demo_data():
     ]
     db.products.insert_many(products)
     
-    # Create sample orders
     orders = [
-        {
-            "id": "ORD-K9J2L4M1",
-            "customer_id": 1,
-            "customerName": "ABC Furniture Works",
-            "status": "Dispatched",
-            "amount": 10711.80,
-            "grand_total": 10711.80,
-            "order_date": "2024-01-15T09:15:00Z",
-            "paymentStatus": "Credit",
-            "sales_person_id": 2,
-            "salesPerson": "Manager User",
-            "items": [
-                {"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 48, "unitPrice": 85.00, "price": 85.00, "unit": "ea"},
-                {"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 36, "unitPrice": 122.50, "price": 122.50, "unit": "ea"},
-                {"product_id": "TIM-001", "productName": "Oak Finish Trim", "name": "Oak Finish Trim", "quantity": 150, "unitPrice": 14.81, "price": 14.81, "unit": "ea"}
-            ],
-            "images": []
-        },
-        {
-            "id": "ORD-A1B2C3D4",
-            "customer_id": 1,
-            "customerName": "ABC Furniture Works",
-            "status": "Completed",
-            "amount": 2500.00,
-            "grand_total": 2500.00,
-            "order_date": "2024-01-10T14:30:00Z",
-            "paymentStatus": "Paid",
-            "sales_person_id": 2,
-            "salesPerson": "Manager User",
-            "items": [
-                {"product_id": "PLY-003", "productName": "Teak Plywood", "name": "Teak Plywood", "quantity": 10, "unitPrice": 150.00, "price": 150.00, "unit": "ea"},
-                {"product_id": "TIM-002", "productName": "Pine Stud (2x4)", "name": "Pine Stud (2x4)", "quantity": 181, "unitPrice": 5.50, "price": 5.50, "unit": "ea"}
-            ],
-            "images": []
-        },
-        {
-            "id": "ORD-X7Y8Z9W0",
-            "customer_id": 3,
-            "customerName": "Modern Cabinets Ltd",
-            "status": "Created",
-            "amount": 1250.00,
-            "grand_total": 1250.00,
-            "order_date": "2024-01-20T11:00:00Z",
-            "paymentStatus": "Credit",
-            "sales_person_id": 2,
-            "salesPerson": "Manager User",
-            "items": [
-                {"product_id": "PLY-004", "productName": "MDF Board (1/4\")", "name": "MDF Board (1/4\")", "quantity": 50, "unitPrice": 18.50, "price": 18.50, "unit": "ea"},
-                {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 5, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}
-            ],
-            "images": []
-        },
-        {
-            "id": "ORD-P5Q6R7S8",
-            "customer_id": 5,
-            "customerName": "Premium Plyboards",
-            "status": "Approved",
-            "amount": 3450.00,
-            "grand_total": 3450.00,
-            "order_date": "2024-01-18T16:45:00Z",
-            "paymentStatus": "Credit",
-            "sales_person_id": 2,
-            "salesPerson": "Manager User",
-            "items": [
-                {"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 30, "unitPrice": 85.00, "price": 85.00, "unit": "ea"},
-                {"product_id": "TIM-003", "productName": "Cedar Decking", "name": "Cedar Decking", "quantity": 40, "unitPrice": 24.99, "price": 24.99, "unit": "ea"}
-            ],
-            "images": []
-        },
-        {
-            "id": "ORD-M2N3O4P5",
-            "customer_id": 1,
-            "customerName": "ABC Furniture Works",
-            "status": "Invoiced",
-            "amount": 5250.00,
-            "grand_total": 5250.00,
-            "order_date": "2024-01-12T10:30:00Z",
-            "paymentStatus": "Credit",
-            "sales_person_id": 2,
-            "salesPerson": "Manager User",
-            "items": [
-                {"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 30, "unitPrice": 122.50, "price": 122.50, "unit": "ea"},
-                {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 30, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}
-            ],
-            "images": []
-        }
+        {"id": "ORD-K9J2L4M1", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Dispatched", "amount": 10711.80, "grand_total": 10711.80, "order_date": "2024-01-15T09:15:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 48, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 36, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-001", "productName": "Oak Finish Trim", "name": "Oak Finish Trim", "quantity": 150, "unitPrice": 14.81, "price": 14.81, "unit": "ea"}], "images": []},
+        {"id": "ORD-A1B2C3D4", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Completed", "amount": 2500.00, "grand_total": 2500.00, "order_date": "2024-01-10T14:30:00Z", "paymentStatus": "Paid", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-003", "productName": "Teak Plywood", "name": "Teak Plywood", "quantity": 10, "unitPrice": 150.00, "price": 150.00, "unit": "ea"}, {"product_id": "TIM-002", "productName": "Pine Stud (2x4)", "name": "Pine Stud (2x4)", "quantity": 181, "unitPrice": 5.50, "price": 5.50, "unit": "ea"}], "images": []},
+        {"id": "ORD-X7Y8Z9W0", "customer_id": 3, "customerName": "Modern Cabinets Ltd", "status": "Created", "amount": 1250.00, "grand_total": 1250.00, "order_date": "2024-01-20T11:00:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-004", "productName": "MDF Board (1/4\")", "name": "MDF Board (1/4\")", "quantity": 50, "unitPrice": 18.50, "price": 18.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 5, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []},
+        {"id": "ORD-P5Q6R7S8", "customer_id": 5, "customerName": "Premium Plyboards", "status": "Approved", "amount": 3450.00, "grand_total": 3450.00, "order_date": "2024-01-18T16:45:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 30, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "TIM-003", "productName": "Cedar Decking", "name": "Cedar Decking", "quantity": 40, "unitPrice": 24.99, "price": 24.99, "unit": "ea"}], "images": []},
+        {"id": "ORD-M2N3O4P5", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Invoiced", "amount": 5250.00, "grand_total": 5250.00, "order_date": "2024-01-12T10:30:00Z", "paymentStatus": "Credit", "sales_person_id": 2, "salesPerson": "Manager User", "items": [{"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 30, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 30, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []}
     ]
     db.orders.insert_many(orders)
     
-    # Create sample invoices
     invoices = [
-        {
-            "id": "INV-K9J2L4M1",
-            "order_id": "ORD-K9J2L4M1",
-            "customer_id": 1,
-            "customerName": "ABC Furniture Works",
-            "issue_date": "2024-01-15",
-            "due_date": "2024-01-30",
-            "sub_total": 9077.80,
-            "cgst": 817.00,
-            "sgst": 817.00,
-            "grand_total": 10711.80,
-            "status": "Paid",
-            "pricing_type": 2
-        },
-        {
-            "id": "INV-A1B2C3D4",
-            "order_id": "ORD-A1B2C3D4",
-            "customer_id": 1,
-            "customerName": "ABC Furniture Works",
-            "issue_date": "2024-01-10",
-            "due_date": "2024-01-25",
-            "sub_total": 2118.64,
-            "cgst": 190.68,
-            "sgst": 190.68,
-            "grand_total": 2500.00,
-            "status": "Paid",
-            "pricing_type": 2
-        },
-        {
-            "id": "INV-M2N3O4P5",
-            "order_id": "ORD-M2N3O4P5",
-            "customer_id": 1,
-            "customerName": "ABC Furniture Works",
-            "issue_date": "2024-01-12",
-            "due_date": "2024-01-27",
-            "sub_total": 4449.15,
-            "cgst": 400.43,
-            "sgst": 400.43,
-            "grand_total": 5250.00,
-            "status": "Pending",
-            "pricing_type": 2
-        },
-        {
-            "id": "INV-P5Q6R7S8",
-            "order_id": "ORD-P5Q6R7S8",
-            "customer_id": 5,
-            "customerName": "Premium Plyboards",
-            "issue_date": "2024-01-18",
-            "due_date": "2024-02-02",
-            "sub_total": 2923.73,
-            "cgst": 263.14,
-            "sgst": 263.14,
-            "grand_total": 3450.00,
-            "status": "Pending",
-            "pricing_type": 2
-        }
+        {"id": "INV-K9J2L4M1", "order_id": "ORD-K9J2L4M1", "customer_id": 1, "customerName": "ABC Furniture Works", "issue_date": "2024-01-15", "due_date": "2024-01-30", "sub_total": 9077.80, "cgst": 817.00, "sgst": 817.00, "grand_total": 10711.80, "status": "Paid", "pricing_type": 2},
+        {"id": "INV-A1B2C3D4", "order_id": "ORD-A1B2C3D4", "customer_id": 1, "customerName": "ABC Furniture Works", "issue_date": "2024-01-10", "due_date": "2024-01-25", "sub_total": 2118.64, "cgst": 190.68, "sgst": 190.68, "grand_total": 2500.00, "status": "Paid", "pricing_type": 2},
+        {"id": "INV-M2N3O4P5", "order_id": "ORD-M2N3O4P5", "customer_id": 1, "customerName": "ABC Furniture Works", "issue_date": "2024-01-12", "due_date": "2024-01-27", "sub_total": 4449.15, "cgst": 400.43, "sgst": 400.43, "grand_total": 5250.00, "status": "Pending", "pricing_type": 2},
+        {"id": "INV-P5Q6R7S8", "order_id": "ORD-P5Q6R7S8", "customer_id": 5, "customerName": "Premium Plyboards", "issue_date": "2024-01-18", "due_date": "2024-02-02", "sub_total": 2923.73, "cgst": 263.14, "sgst": 263.14, "grand_total": 3450.00, "status": "Pending", "pricing_type": 2}
     ]
     db.invoices.insert_many(invoices)
     
     print("Demo data initialized successfully!")
 
-# Initialize demo data on startup
 @app.on_event("startup")
 async def startup_event():
     init_demo_data()
 
-# API Routes
+# ============ AUTH ROUTES ============
 @app.get("/api/health")
 async def health():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -337,11 +234,8 @@ async def register(request: RegisterRequest):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    max_id = db.customers.find_one(sort=[("id", -1)])
-    new_id = (max_id["id"] + 1) if max_id else 1
-    
     customer = {
-        "id": new_id,
+        "id": get_next_customer_id(),
         "name": request.name,
         "contactPerson": request.contactPerson,
         "phone": request.phone,
@@ -349,10 +243,13 @@ async def register(request: RegisterRequest):
         "password": hash_password(request.password),
         "role": "Customer",
         "approval_status": "Pending",
+        "is_active": True,
         "pricing_type": 1,
         "outstanding_balance": 0,
+        "credit_limit": 0,
         "sales_person_name": None,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
     }
     db.customers.insert_one(customer)
     return {"success": True, "message": "Registration submitted. Please wait for admin approval."}
@@ -371,6 +268,7 @@ async def refresh_token(payload: dict = Depends(verify_token)):
     new_token = create_token(payload["user_id"], payload["role"])
     return {"token": new_token}
 
+# ============ PRODUCTS ROUTES ============
 @app.get("/api/products")
 async def get_products(
     search: Optional[str] = None,
@@ -389,6 +287,7 @@ async def get_products(
     products = list(db.products.find(query, {"_id": 0}))
     return {"data": products, "products": products}
 
+# ============ ORDERS ROUTES ============
 @app.get("/api/orders")
 async def get_orders_endpoint(
     id: Optional[str] = None,
@@ -403,6 +302,7 @@ async def get_orders_endpoint(
     orders = list(db.orders.find({}, {"_id": 0}).sort("order_date", -1))
     return orders
 
+# ============ INVOICES ROUTES ============
 @app.get("/api/invoices")
 async def get_invoices_endpoint(
     id: Optional[str] = None,
@@ -417,8 +317,9 @@ async def get_invoices_endpoint(
     invoices = list(db.invoices.find({}, {"_id": 0}).sort("issue_date", -1))
     return invoices
 
+# ============ CUSTOMERS CRUD ROUTES ============
 @app.get("/api/customers")
-async def get_customers_endpoint(
+async def get_customers_list(
     action: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
@@ -433,7 +334,149 @@ async def get_customers_endpoint(
     customers = list(db.customers.find({}, {"_id": 0, "password": 0}))
     return customers
 
-# Admin API endpoint
+@app.get("/api/customers/{customer_id}")
+async def get_customer(
+    customer_id: int,
+    payload: dict = Depends(verify_token)
+):
+    customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Get customer orders and invoices for stats
+    orders = list(db.orders.find({"customer_id": customer_id}, {"_id": 0}))
+    invoices = list(db.invoices.find({"customer_id": customer_id}, {"_id": 0}))
+    
+    customer["orders"] = orders
+    customer["invoices"] = invoices
+    customer["total_orders"] = len(orders)
+    customer["total_invoices"] = len(invoices)
+    
+    return {"data": customer}
+
+@app.post("/api/customers")
+async def create_customer(
+    action: Optional[str] = None,
+    body: dict = Body(default={}),
+    payload: dict = Depends(verify_token)
+):
+    if action == "change_password":
+        current_password = body.get("current_password")
+        new_password = body.get("new_password")
+        
+        user = db.users.find_one({"_id": ObjectId(payload["user_id"]), "password": hash_password(current_password)})
+        if not user:
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        
+        db.users.update_one({"_id": ObjectId(payload["user_id"])}, {"$set": {"password": hash_password(new_password)}})
+        return {"success": True, "message": "Password changed successfully"}
+    
+    # Create new customer
+    if not body.get("name") or not body.get("email"):
+        raise HTTPException(status_code=400, detail="Name and email are required")
+    
+    # Check if email already exists
+    existing = db.customers.find_one({"email": body.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    customer = {
+        "id": get_next_customer_id(),
+        "name": body.get("name"),
+        "contactPerson": body.get("contactPerson", ""),
+        "phone": body.get("phone", ""),
+        "email": body.get("email"),
+        "gst_number": body.get("gst_number", ""),
+        "address": body.get("address", ""),
+        "city": body.get("city", ""),
+        "state": body.get("state", ""),
+        "pincode": body.get("pincode", ""),
+        "pricing_type": body.get("pricing_type", 1),
+        "credit_limit": body.get("credit_limit", 0),
+        "notes": body.get("notes", ""),
+        "role": "Customer",
+        "approval_status": body.get("approval_status", "Approved"),
+        "is_active": body.get("is_active", True),
+        "outstanding_balance": 0,
+        "sales_person_name": None,
+        "password": hash_password("customer123"),  # Default password
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.customers.insert_one(customer)
+    del customer["_id"]
+    del customer["password"]
+    
+    return {"success": True, "message": "Customer created successfully", "data": customer}
+
+@app.put("/api/customers/{customer_id}")
+async def update_customer(
+    customer_id: int,
+    body: dict = Body(...),
+    payload: dict = Depends(verify_token)
+):
+    existing = db.customers.find_one({"id": customer_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Check email uniqueness if email is being updated
+    if body.get("email") and body.get("email") != existing.get("email"):
+        email_exists = db.customers.find_one({"email": body.get("email"), "id": {"$ne": customer_id}})
+        if email_exists:
+            raise HTTPException(status_code=400, detail="Email already in use by another customer")
+    
+    update_data = {
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    allowed_fields = ["name", "contactPerson", "phone", "email", "gst_number", "address", 
+                      "city", "state", "pincode", "pricing_type", "credit_limit", "notes",
+                      "approval_status", "is_active"]
+    
+    for field in allowed_fields:
+        if field in body:
+            update_data[field] = body[field]
+    
+    db.customers.update_one({"id": customer_id}, {"$set": update_data})
+    
+    updated = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
+    return {"success": True, "message": "Customer updated successfully", "data": updated}
+
+@app.delete("/api/customers/{customer_id}")
+async def delete_customer(
+    customer_id: int,
+    hard_delete: bool = Query(False),
+    payload: dict = Depends(verify_token)
+):
+    existing = db.customers.find_one({"id": customer_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Check if customer has orders
+    orders_count = db.orders.count_documents({"customer_id": customer_id})
+    
+    if hard_delete:
+        if orders_count > 0:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot delete customer with {orders_count} orders. Archive instead."
+            )
+        db.customers.delete_one({"id": customer_id})
+        return {"success": True, "message": "Customer permanently deleted"}
+    else:
+        # Soft delete (archive)
+        db.customers.update_one(
+            {"id": customer_id}, 
+            {"$set": {
+                "is_active": False, 
+                "approval_status": "Archived",
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        return {"success": True, "message": "Customer archived successfully"}
+
+# ============ ADMIN ROUTES ============
 @app.get("/api/admin")
 async def admin_resource(
     resource: Optional[str] = None,
@@ -441,16 +484,26 @@ async def admin_resource(
     page: int = 1,
     per_page: int = 10,
     search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
     payload: dict = Depends(verify_token)
 ):
     if resource == "dashboard":
         pending_orders = db.orders.count_documents({"status": {"$in": ["Created", "Pending"]}})
-        new_orders_week = db.orders.count_documents({})  # Simplified
+        new_orders_week = db.orders.count_documents({})
         due_invoices = db.invoices.count_documents({"status": {"$ne": "Paid"}})
+        pending_customers = db.customers.count_documents({"approval_status": "Pending"})
+        total_customers = db.customers.count_documents({})
+        active_customers = db.customers.count_documents({"is_active": True, "approval_status": "Approved"})
+        
         return {
             "pending_orders_count": pending_orders,
             "new_orders_week": new_orders_week,
-            "due_invoices_count": due_invoices
+            "due_invoices_count": due_invoices,
+            "pending_customers": pending_customers,
+            "total_customers": total_customers,
+            "active_customers": active_customers
         }
     
     if resource == "orders":
@@ -467,12 +520,7 @@ async def admin_resource(
         
         return {
             "data": orders,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "total_pages": (total + per_page - 1) // per_page
-            }
+            "pagination": {"page": page, "per_page": per_page, "total": total, "total_pages": (total + per_page - 1) // per_page}
         }
     
     if resource == "invoices":
@@ -489,34 +537,55 @@ async def admin_resource(
         
         return {
             "data": invoices,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "total_pages": (total + per_page - 1) // per_page
-            }
+            "pagination": {"page": page, "per_page": per_page, "total": total, "total_pages": (total + per_page - 1) // per_page}
         }
     
     if resource == "customers":
         skip = (page - 1) * per_page
         query = {}
+        
         if search:
             query["$or"] = [
                 {"name": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}}
+                {"email": {"$regex": search, "$options": "i"}},
+                {"contactPerson": {"$regex": search, "$options": "i"}},
+                {"phone": {"$regex": search, "$options": "i"}},
+                {"gst_number": {"$regex": search, "$options": "i"}}
             ]
         
+        if status:
+            if status == "active":
+                query["is_active"] = True
+                query["approval_status"] = "Approved"
+            elif status == "inactive":
+                query["is_active"] = False
+            elif status == "pending":
+                query["approval_status"] = "Pending"
+            elif status == "archived":
+                query["approval_status"] = "Archived"
+            elif status == "rejected":
+                query["approval_status"] = "Rejected"
+        
+        # Sorting
+        sort_field = sort_by or "created_at"
+        sort_direction = DESCENDING if sort_order == "desc" else ASCENDING
+        
+        # Map frontend sort fields to DB fields
+        sort_map = {
+            "name": "name",
+            "email": "email", 
+            "created_at": "created_at",
+            "outstanding_balance": "outstanding_balance",
+            "pricing_type": "pricing_type"
+        }
+        sort_field = sort_map.get(sort_field, "created_at")
+        
         total = db.customers.count_documents(query)
-        customers = list(db.customers.find(query, {"_id": 0, "password": 0}).skip(skip).limit(per_page))
+        customers = list(db.customers.find(query, {"_id": 0, "password": 0}).sort(sort_field, sort_direction).skip(skip).limit(per_page))
         
         return {
             "data": customers,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "total_pages": (total + per_page - 1) // per_page
-            }
+            "pagination": {"page": page, "per_page": per_page, "total": total, "total_pages": (total + per_page - 1) // per_page}
         }
     
     return {"error": "Unknown resource"}
@@ -544,28 +613,39 @@ async def admin_action(
     
     if action == "approve_customer":
         customer_id = body.get("customer_id")
-        result = db.customers.update_one({"id": customer_id}, {"$set": {"approval_status": "Approved"}})
+        result = db.customers.update_one(
+            {"id": customer_id}, 
+            {"$set": {"approval_status": "Approved", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
         if result.modified_count == 0:
             raise HTTPException(status_code=404, detail="Customer not found")
         return {"success": True, "message": "Customer approved"}
     
-    return {"error": "Unknown action"}
-
-@app.post("/api/customers")
-async def customers_action(
-    action: Optional[str] = None,
-    body: dict = Body(default={}),
-    payload: dict = Depends(verify_token)
-):
-    if action == "change_password":
-        current_password = body.get("current_password")
-        new_password = body.get("new_password")
-        
-        user = db.users.find_one({"_id": ObjectId(payload["user_id"]), "password": hash_password(current_password)})
-        if not user:
-            raise HTTPException(status_code=400, detail="Current password is incorrect")
-        
-        db.users.update_one({"_id": ObjectId(payload["user_id"])}, {"$set": {"password": hash_password(new_password)}})
-        return {"success": True, "message": "Password changed successfully"}
+    if action == "reject_customer":
+        customer_id = body.get("customer_id")
+        reason = body.get("reason", "")
+        result = db.customers.update_one(
+            {"id": customer_id}, 
+            {"$set": {
+                "approval_status": "Rejected", 
+                "notes": reason,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        return {"success": True, "message": "Customer rejected"}
+    
+    if action == "toggle_customer_status":
+        customer_id = body.get("customer_id")
+        is_active = body.get("is_active")
+        result = db.customers.update_one(
+            {"id": customer_id}, 
+            {"$set": {"is_active": is_active, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        status_text = "activated" if is_active else "deactivated"
+        return {"success": True, "message": f"Customer {status_text}"}
     
     return {"error": "Unknown action"}
