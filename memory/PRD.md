@@ -8,10 +8,14 @@
 5. Invoice status editing functionality
 6. Reusable CRUD architecture with professional components
 7. **Customer Portal** - Build a separate customer-facing portal for order management
+8. **Sales Portal** - Build a sales team portal for managing assigned customers
+9. **Standalone Admin App** - Build a new standalone admin app from user's GitHub repo
 
 ## Architecture
 - **Admin Frontend**: React 19 + TypeScript + Vite + Tailwind CSS (port 3000)
 - **Customer Portal**: React 19 + TypeScript + Vite + Tailwind CSS (served at /portal/)
+- **Sales Portal**: React 19 + TypeScript + Vite + Tailwind CSS (served at /sales/)
+- **Standalone Admin App**: `/app/admin-app-standalone/` - Independent admin app
 - **Backend**: FastAPI (Python) with MongoDB
 - **Authentication**: JWT-based authentication
 - **Database**: MongoDB (local)
@@ -20,6 +24,7 @@
 1. **Super Admin** - Full access to all admin features
 2. **Manager** - Can manage orders, customers, invoices, products
 3. **Customer** - Can browse products, place orders, view their orders/invoices
+4. **Sales Person** - Can manage assigned customers, place orders on their behalf
 
 ## Core Requirements (Static)
 - [x] User authentication (login/logout)
@@ -30,10 +35,12 @@
 - [x] Invoice management (list, filter, status editing)
 - [x] Profile management
 - [x] **Customer Portal** with product catalog, cart, checkout, orders, invoices
+- [x] **Sales Portal** with customer management and order placement
+- [x] **Standalone Admin App** - Independent admin panel
 
 ## Implemented Features
 
-### Admin Panel
+### Admin Panel (Original)
 - FastAPI backend with MongoDB
 - React frontend with Vite
 - JWT authentication
@@ -41,78 +48,68 @@
 - Complete Customer CRUD with search, filter, activate/deactivate, archive
 - Complete Product CRUD with manual tier pricing (Tier 1, 2, 3)
 - Order management with status filters
-- Invoice status editing (Pending, Paid, Overdue, Partially Paid, Cancelled)
-- Reusable UI Components (Toast, ConfirmDialog, SlideOver, DataTable)
+- Invoice status editing
 
 ### Customer Portal (March 17, 2026)
 - Mobile-first design with bottom navigation
 - Customer registration with admin approval workflow
 - Customer login/logout
-- **Dashboard**: Recent orders, total spend, quick actions
-- **Products**: Catalog with search, category filters, tier-based pricing
-- **Cart**: Add/remove items, quantity adjustment
-- **Checkout**: Place orders from cart
-- **Orders**: View order history with status tracking
-- **Invoices**: View invoices with PDF download
-- **Profile**: View/edit customer details
+- Product catalog with tier-based pricing
+- Cart and checkout functionality
+- Order and invoice management
 
-### Backend Endpoints
+### Sales Portal (March 17, 2026)
+- Dashboard with assigned customers stats
+- Customer management (view assigned customers only)
+- Product catalog with customer-specific pricing
+- Order placement on behalf of customers
+- Add new customers feature
 
-#### Auth & User
-- POST /api/login - Login (supports admin and customer roles)
-- POST /api/logout - Logout
-- POST /api/register - Customer registration
-- GET /api/me - Get current user profile
-- POST /api/token/refresh - Refresh JWT token
+### Standalone Admin App (March 17, 2026) - COMPLETED
+**Location**: `/app/admin-app-standalone/`
 
-#### Products
-- GET /api/products - List all products
-- GET /api/products/{id} - Get single product
-- POST /api/products - Create product (with tier pricing)
-- PUT /api/products/{id} - Update product
-- DELETE /api/products/{id} - Delete product
+**Features Implemented**:
+- Desktop-first sidebar layout
+- Login page with admin authentication
+- Dashboard with real-time KPIs (pending orders, total orders, due invoices, completed)
+- Customer management with DataTable, search, filters, and SlideOver forms
+- Product management with CRUD operations and tier pricing
+- Order management with status workflow visualization
+- Invoice management with status updates
+- Profile page
+- Reusable UI Components:
+  - `DataTable.tsx` - Sortable, paginated data tables
+  - `SlideOver.tsx` - Side panel forms
+  - `Toast.tsx` - Toast notification system
+  - `ConfirmDialog.tsx` - Confirmation modals
 
-#### Customers (Admin)
-- GET /api/customers - List all customers
-- GET /api/customers/{id} - Get customer with orders/invoices
-- POST /api/customers - Create customer
-- PUT /api/customers/{id} - Update customer
-- DELETE /api/customers/{id} - Archive/delete customer
+**Tech Stack**:
+- React 19, TypeScript, Vite
+- Tailwind CSS v4
+- React Router v7
+- Motion (Framer Motion)
+- Lucide Icons
 
-#### Orders
-- GET /api/orders - List all orders
-- GET /api/customer/orders - List customer's orders (for portal)
-- GET /api/customer/orders/{id} - Get customer's order detail
-
-#### Invoices
-- GET /api/invoices - List all invoices
-- PUT /api/invoices/{id} - Update invoice status
-- GET /api/customer/invoices - List customer's invoices (for portal)
-- GET /api/customer/invoices/{id} - Get customer's invoice detail
-
-#### Cart & Checkout (Customer Portal)
-- GET /api/cart - Get customer's cart
-- POST /api/cart - Add/update cart item
-- DELETE /api/cart - Clear cart or remove item
-- POST /api/checkout - Create order from cart
-
-#### Profile (Customer Portal)
-- PATCH /api/customer/profile - Update customer profile
-- POST /api/customer/change-password - Change password
-
-## Testing Results (Iteration 5)
-- Backend: 95% pass rate (39/41 tests)
-- Frontend: 100% - All pages load and function correctly
-- Both Admin Panel and Customer Portal verified working
+**Build Status**: ✅ Successfully built
 
 ## Credentials for Testing
 - **Admin**: admin@naturalplylam.com / admin123
 - **Manager**: manager@naturalplylam.com / manager123
 - **Customer**: customer1@example.com / customer123
+- **Sales Person**: sales1@naturalplylam.com / sales123
 
 ## URLs
 - **Admin Panel**: https://7cc857b1-bccb-4094-be05-21237c0824fe.preview.emergentagent.com/
 - **Customer Portal**: https://7cc857b1-bccb-4094-be05-21237c0824fe.preview.emergentagent.com/portal/
+- **Sales Portal**: https://7cc857b1-bccb-4094-be05-21237c0824fe.preview.emergentagent.com/sales/
+- **Standalone Admin App (Dev)**: http://localhost:3001
+
+## Standalone Admin App Files
+- `/app/admin-app-standalone/README.md` - Documentation
+- `/app/admin-app-standalone/.env.example` - Environment template
+- `/app/admin-app-standalone/.gitignore` - Git ignore rules
+- `/app/admin-app-standalone/package.json` - Dependencies
+- `/app/admin-app-standalone/dist/` - Production build
 
 ## Prioritized Backlog
 
@@ -122,6 +119,8 @@
 - [x] Invoice status editing
 - [x] Reusable components
 - [x] Customer Portal with all features
+- [x] Sales Portal implementation
+- [x] Standalone Admin App
 
 ### P1 (High)
 - [ ] Order creation for admin
