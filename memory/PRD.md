@@ -24,12 +24,13 @@ Transform the application into a **B2B Plywood/Timber direct ordering system** w
 ### B2B Ordering System (NEW)
 - **Fast Order Page**: Horizontal row-based layout matching reference design
   - Product | Thickness | Size | Qty | Amount columns
+  - **Searchable product dropdown** - Type to filter products (handles 100s of items)
   - Auto-cascading dropdowns (selecting one opens next)
+  - **Auto-select last ordered product** on page load
+  - **Copy product on "+ Add Product"** for quick variant ordering
   - Multiple products per order
-  - "+ Add Product" button
   - "Upload Invoice / Photo Order" option
   - Bottom summary: Total Qty | Total Amount
-  - "Next" button to submit
 
 - **Split Billing**: One order with mixed items creates 2 separate bills
   - Plywood items → Plywood order/invoice
@@ -45,6 +46,18 @@ Transform the application into a **B2B Plywood/Timber direct ordering system** w
 
 - **Order Edit/Lock**: Orders are editable until admin confirms
   - `is_editable: true` until status = "Confirmed"
+
+### MPIN Quick Login (NEW)
+- **Set MPIN in Profile**: Users can set 4-6 digit MPIN
+- **Login with Phone + MPIN**: Quick login without email/password
+- **Email | MPIN toggle** on login page
+- APIs: `/api/mpin/set`, `/api/mpin/login`, `/api/mpin/check`
+
+### Admin Banner System (NEW)
+- **Admin can create/edit/delete banners**
+- **Banners displayed on customer homepage** (above Quick Order)
+- Supports: title, description, image_url, link_url
+- APIs: `/api/banners` (public), `/api/admin/banners` (admin)
 
 ### Backend V2 APIs
 - `GET /api/product-groups` - Plywood/Timber groups

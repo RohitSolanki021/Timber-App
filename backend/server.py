@@ -140,6 +140,31 @@ class InvoicePaidRequest(BaseModel):
 class ApproveCustomerRequest(BaseModel):
     customer_id: int
 
+# MPIN login model
+class MpinLoginRequest(BaseModel):
+    phone: str
+    mpin: str
+
+class MpinSetRequest(BaseModel):
+    mpin: str  # 4-6 digit PIN
+
+# Banner model
+class BannerCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    link_url: Optional[str] = None
+    is_active: bool = True
+    display_order: int = 0
+
+class BannerUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    link_url: Optional[str] = None
+    is_active: Optional[bool] = None
+    display_order: Optional[int] = None
+
 # Order Item model for the new direct order system
 class OrderItemCreate(BaseModel):
     product_group: str  # "Plywood" or "Timber"
@@ -464,6 +489,150 @@ async def register(request: RegisterRequest):
     db.customers.insert_one(new_customer)
     
     return {"success": True, "message": "Registration successful. Please wait for admin approval.", "customer_id": new_id}
+
+# ============ MPIN LOGIN ============
+
+@app.post("/api/mpin/set")
+async def set_mpin(request: MpinSetRequest, payload: dict = Depends(verify_token)):
+    """Set or update MPIN for quick login"""
+    user_id = payload.get("user_id")
+    mpin = request.mpin
+    
+    # Validate MPIN (4-6 digits)
+    if not mpin.isdigit() or len(mpin) < 4 or len(mpin) > 6:
+        raise HTTPException(status_code=400, detail="MPIN must be 4-6 digits")
+    
+    hashed_mpin = hash_password(mpin)
+    
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+        db.customers.update_one(
+            {"id": customer_id},
+            {"$set": {"mpin": hashed_mpin, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    else:
+        db.users.update_one(
+            {"email": user_id},
+            {"$set": {"mpin": hashed_mpin, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    return {"success": True, "message": "MPIN set successfully"}
+
+@app.post("/api/mpin/login")
+async def mpin_login(request: MpinLoginRequest):
+    """Login using phone number and MPIN"""
+    phone = request.phone
+    mpin_hash = hash_password(request.mpin)
+    
+    # Try customer login first
+    customer = db.customers.find_one({"phone": phone, "mpin": mpin_hash})
+    if customer:
+        if customer.get("approval_status") != "Approved":
+            raise HTTPException(status_code=403, detail="Account not approved")
+        if customer.get("is_active") == False:
+            raise HTTPException(status_code=403, detail="Account is inactive")
+        
+        token = create_token(f"customer_{customer['id']}", "Customer")
+        customer_data = {k: v for k, v in customer.items() if k not in ["_id", "password", "mpin"]}
+        return {"token": token, "user": customer_data}
+    
+    # Try user (admin/sales) login
+    user = db.users.find_one({"phone": phone, "mpin": mpin_hash})
+    if user:
+        token = create_token(user["email"], user["role"])
+        user_data = serialize_doc(user)
+        del user_data["password"]
+        if "mpin" in user_data:
+            del user_data["mpin"]
+        return {"token": token, "user": user_data}
+    
+    raise HTTPException(status_code=401, detail="Invalid phone number or MPIN")
+
+@app.get("/api/mpin/check")
+async def check_mpin_set(payload: dict = Depends(verify_token)):
+    """Check if current user has MPIN set"""
+    user_id = payload.get("user_id")
+    
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+        customer = db.customers.find_one({"id": customer_id})
+        return {"has_mpin": bool(customer and customer.get("mpin"))}
+    else:
+        user = db.users.find_one({"email": user_id})
+        return {"has_mpin": bool(user and user.get("mpin"))}
+
+# ============ BANNER MANAGEMENT ============
+
+@app.get("/api/banners")
+async def get_banners():
+    """Get all active banners (public endpoint)"""
+    banners = list(db.banners.find({"is_active": True}, {"_id": 0}).sort("display_order", 1))
+    return {"banners": banners}
+
+@app.get("/api/admin/banners")
+async def get_all_banners(payload: dict = Depends(verify_token)):
+    """Get all banners (admin only)"""
+    role = payload.get("role", "")
+    if role not in ["Super Admin", "Admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    banners = list(db.banners.find({}, {"_id": 0}).sort("display_order", 1))
+    return {"banners": banners}
+
+@app.post("/api/admin/banners")
+async def create_banner(banner: BannerCreate, payload: dict = Depends(verify_token)):
+    """Create a new banner (admin only)"""
+    role = payload.get("role", "")
+    if role not in ["Super Admin", "Admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    banner_id = f"BNR-{secrets.token_hex(4).upper()}"
+    banner_data = {
+        "id": banner_id,
+        "title": banner.title,
+        "description": banner.description,
+        "image_url": banner.image_url,
+        "link_url": banner.link_url,
+        "is_active": banner.is_active,
+        "display_order": banner.display_order,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    db.banners.insert_one(banner_data)
+    
+    return {"success": True, "banner": {k: v for k, v in banner_data.items() if k != "_id"}}
+
+@app.put("/api/admin/banners/{banner_id}")
+async def update_banner(banner_id: str, banner: BannerUpdate, payload: dict = Depends(verify_token)):
+    """Update a banner (admin only)"""
+    role = payload.get("role", "")
+    if role not in ["Super Admin", "Admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    existing = db.banners.find_one({"id": banner_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    
+    update_data = {k: v for k, v in banner.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    db.banners.update_one({"id": banner_id}, {"$set": update_data})
+    
+    updated = db.banners.find_one({"id": banner_id}, {"_id": 0})
+    return {"success": True, "banner": updated}
+
+@app.delete("/api/admin/banners/{banner_id}")
+async def delete_banner(banner_id: str, payload: dict = Depends(verify_token)):
+    """Delete a banner (admin only)"""
+    role = payload.get("role", "")
+    if role not in ["Super Admin", "Admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = db.banners.delete_one({"id": banner_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Banner not found")
+    
+    return {"success": True, "message": "Banner deleted"}
 
 # ============ PRODUCT CATALOG ROUTES (New V2) ============
 
