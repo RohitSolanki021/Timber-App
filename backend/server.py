@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, Query, Body
+from fastapi import FastAPI, HTTPException, Depends, Header, Query, Body, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
@@ -10,6 +11,8 @@ import jwt
 import hashlib
 import secrets
 import re
+import json
+import base64
 
 app = FastAPI(title="Natural Plylam Admin API")
 
@@ -64,6 +67,16 @@ def get_next_customer_id():
     max_id = db.customers.find_one(sort=[("id", -1)])
     return (max_id["id"] + 1) if max_id and "id" in max_id else 1
 
+def generate_order_id():
+    chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    suffix = ''.join(secrets.choice(chars) for _ in range(8))
+    return f"ORD-{suffix}"
+
+def generate_invoice_id():
+    chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    suffix = ''.join(secrets.choice(chars) for _ in range(8))
+    return f"INV-{suffix}"
+
 # Pydantic Models
 class LoginRequest(BaseModel):
     email: str
@@ -87,7 +100,7 @@ class CustomerCreate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     pincode: Optional[str] = None
-    pricing_type: int = Field(default=1, ge=1, le=5)
+    pricing_tier: int = Field(default=1, ge=1, le=6)  # Changed to 6 tiers
     credit_limit: Optional[float] = 0
     notes: Optional[str] = None
 
@@ -101,7 +114,7 @@ class CustomerUpdate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     pincode: Optional[str] = None
-    pricing_type: Optional[int] = Field(None, ge=1, le=5)
+    pricing_tier: Optional[int] = Field(None, ge=1, le=6)
     credit_limit: Optional[float] = None
     notes: Optional[str] = None
     approval_status: Optional[str] = None
@@ -115,7 +128,7 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     gst_number: Optional[str] = None
     approval_status: Optional[str] = None
-    pricing_type: Optional[int] = 1
+    pricing_tier: Optional[int] = 1
 
 class OrderStatusUpdate(BaseModel):
     order_id: str
@@ -127,8 +140,32 @@ class InvoicePaidRequest(BaseModel):
 class ApproveCustomerRequest(BaseModel):
     customer_id: int
 
-# Initialize demo data
+# Order Item model for the new direct order system
+class OrderItemCreate(BaseModel):
+    product_group: str  # "Plywood" or "Timber"
+    product_id: str
+    product_name: str
+    thickness: str
+    size: str
+    quantity: int
+    unit_price: float
+    total_price: float
+
+class DirectOrderCreate(BaseModel):
+    customer_id: int
+    items: List[OrderItemCreate]
+    photo_reference: Optional[str] = None  # Base64 encoded image
+    notes: Optional[str] = None
+
+# Initialize demo data with new product catalog
 def init_demo_data():
+    # Clear existing data for fresh start
+    if db.products_v2.count_documents({}) == 0:
+        init_product_catalog()
+    
+    if db.stock.count_documents({}) == 0:
+        init_stock_data()
+    
     if db.users.count_documents({}) > 0:
         return
     
@@ -139,7 +176,7 @@ def init_demo_data():
         "role": "Super Admin",
         "phone": "9876543210",
         "approval_status": "Approved",
-        "pricing_type": 1,
+        "pricing_tier": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     db.users.insert_one(admin)
@@ -151,12 +188,11 @@ def init_demo_data():
         "role": "Manager",
         "phone": "9876543211",
         "approval_status": "Approved",
-        "pricing_type": 1,
+        "pricing_tier": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     db.users.insert_one(manager)
     
-    # Worker Admin (Normal Admin with limited access)
     worker_admin = {
         "email": "worker@naturalplylam.com",
         "password": hash_password("worker123"),
@@ -164,12 +200,11 @@ def init_demo_data():
         "role": "Admin",
         "phone": "9876543219",
         "approval_status": "Approved",
-        "pricing_type": 1,
+        "pricing_tier": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     db.users.insert_one(worker_admin)
     
-    # Sales Person
     sales_person = {
         "email": "sales@naturalplylam.com",
         "password": hash_password("sales123"),
@@ -177,20 +212,20 @@ def init_demo_data():
         "role": "Sales Person",
         "phone": "9876543220",
         "approval_status": "Approved",
-        "pricing_type": 1,
+        "pricing_tier": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     sales_result = db.users.insert_one(sales_person)
     sales_person_id = str(sales_result.inserted_id)
     
+    # Customers with 6-tier pricing
     customers = [
-        {"email": "customer1@example.com", "name": "ABC Furniture Works", "business_name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area, Mumbai, Maharashtra - 400001", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
-        {"email": "customer2@example.com", "name": "XYZ Interiors", "business_name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "456 Commercial Complex, Delhi - 110001", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
-        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "business_name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub, Bangalore - 560001", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
-        {"email": "customer4@example.com", "name": "Elite Woodworks", "business_name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "321 Artisan Lane, Chennai - 600001", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
-        {"email": "customer5@example.com", "name": "Premium Plyboards", "business_name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_type": 2, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center, Hyderabad - 500001", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
-        {"email": "customer6@example.com", "name": "Classic Interiors", "business_name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": False, "pricing_type": 2, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "890 Design District, Pune - 411001", "city": "Pune", "state": "Maharashtra", "pincode": "411001", "notes": "Account deactivated - payment issues"},
-        {"email": "customer7@example.com", "name": "Royal Furnishings", "business_name": "Royal Furnishings", "contactPerson": "Robert Wilson", "phone": "9876543218", "role": "Customer", "approval_status": "Rejected", "is_active": False, "pricing_type": 1, "outstanding_balance": 0, "credit_limit": 0, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "234 Market Street, Kolkata - 700001", "city": "Kolkata", "state": "West Bengal", "pincode": "700001", "notes": "Rejected - incomplete documentation"},
+        {"email": "customer1@example.com", "name": "ABC Furniture Works", "business_name": "ABC Furniture Works", "contactPerson": "John Doe", "phone": "9876543212", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_tier": 2, "outstanding_balance": 15000, "credit_limit": 50000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "27AABCU9603R1ZM", "address": "123 Industrial Area, Mumbai, Maharashtra - 400001", "city": "Mumbai", "state": "Maharashtra", "pincode": "400001"},
+        {"email": "customer2@example.com", "name": "XYZ Interiors", "business_name": "XYZ Interiors", "contactPerson": "Jane Smith", "phone": "9876543213", "role": "Customer", "approval_status": "Pending", "is_active": True, "pricing_tier": 1, "outstanding_balance": 0, "credit_limit": 25000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "456 Commercial Complex, Delhi - 110001", "city": "Delhi", "state": "Delhi", "pincode": "110001"},
+        {"email": "customer3@example.com", "name": "Modern Cabinets Ltd", "business_name": "Modern Cabinets Ltd", "contactPerson": "Mike Johnson", "phone": "9876543214", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_tier": 3, "outstanding_balance": 25000, "credit_limit": 100000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "09AAACH7409R1ZZ", "address": "789 Manufacturing Hub, Bangalore - 560001", "city": "Bangalore", "state": "Karnataka", "pincode": "560001"},
+        {"email": "customer4@example.com", "name": "Elite Woodworks", "business_name": "Elite Woodworks", "contactPerson": "Sarah Williams", "phone": "9876543215", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_tier": 4, "outstanding_balance": 0, "credit_limit": 30000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "321 Artisan Lane, Chennai - 600001", "city": "Chennai", "state": "Tamil Nadu", "pincode": "600001"},
+        {"email": "customer5@example.com", "name": "Premium Plyboards", "business_name": "Premium Plyboards", "contactPerson": "David Brown", "phone": "9876543216", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_tier": 5, "outstanding_balance": 8500, "credit_limit": 75000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "gst_number": "33AABCP1234A1ZX", "address": "567 Trade Center, Hyderabad - 500001", "city": "Hyderabad", "state": "Telangana", "pincode": "500001"},
+        {"email": "customer6@example.com", "name": "Classic Interiors", "business_name": "Classic Interiors", "contactPerson": "Emily Davis", "phone": "9876543217", "role": "Customer", "approval_status": "Approved", "is_active": True, "pricing_tier": 6, "outstanding_balance": 0, "credit_limit": 40000, "sales_person_id": sales_person_id, "sales_person_name": "Rahul Sales", "address": "890 Design District, Pune - 411001", "city": "Pune", "state": "Maharashtra", "pincode": "411001"},
     ]
     for i, cust in enumerate(customers, 1):
         cust["id"] = i
@@ -198,70 +233,176 @@ def init_demo_data():
         cust["created_at"] = datetime.now(timezone.utc).isoformat()
         cust["updated_at"] = datetime.now(timezone.utc).isoformat()
     db.customers.insert_many(customers)
+
+def init_product_catalog():
+    """Initialize the new product catalog with thickness and size variants"""
     
+    # Product Groups
+    product_groups = [
+        {"id": "plywood", "name": "Plywood", "display_order": 1},
+        {"id": "timber", "name": "Timber", "display_order": 2}
+    ]
+    db.product_groups.drop()
+    db.product_groups.insert_many(product_groups)
+    
+    # Products with variants (from PDF catalog)
     products = [
-        {"id": "PLY-001", "name": "Birch Veneer (3/4\")", "category": "Plywood", "price": 85.00, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 100, "description": "High-quality birch veneer plywood.", "pricing_rates": {"1": 85, "2": 80, "3": 75}},
-        {"id": "PLY-002", "name": "Marine Plywood (1/2\")", "category": "Plywood", "price": 122.50, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 50, "description": "Water-resistant marine grade plywood.", "pricing_rates": {"1": 122.50, "2": 115, "3": 110}},
-        {"id": "TIM-001", "name": "Oak Finish Trim", "category": "Timber", "price": 14.81, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 200, "description": "Solid oak finish trim for elegant interiors.", "pricing_rates": {"1": 14.81, "2": 13.50, "3": 12}},
-        {"id": "TIM-002", "name": "Pine Stud (2x4)", "category": "Timber", "price": 5.50, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 500, "description": "Standard pine stud for construction.", "pricing_rates": {"1": 5.50, "2": 5.00, "3": 4.50}},
-        {"id": "PLY-003", "name": "Teak Plywood", "category": "Plywood", "price": 150.00, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 30, "description": "Premium teak plywood for luxury furniture.", "pricing_rates": {"1": 150, "2": 140, "3": 130}},
-        {"id": "TIM-003", "name": "Cedar Decking", "category": "Timber", "price": 24.99, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 120, "description": "Natural cedar decking boards for outdoor use.", "pricing_rates": {"1": 24.99, "2": 22.50, "3": 20}},
-        {"id": "PLY-004", "name": "MDF Board (1/4\")", "category": "Plywood", "price": 18.50, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 300, "description": "Medium-density fibreboard for versatile projects.", "pricing_rates": {"1": 18.50, "2": 17, "3": 15.50}},
-        {"id": "TIM-004", "name": "Walnut Hardwood", "category": "Timber", "price": 45.00, "priceUnit": "ea", "stock_status": "in_stock", "stock_quantity": 45, "description": "Rich walnut hardwood for high-end carpentry.", "pricing_rates": {"1": 45, "2": 42, "3": 38}},
+        # Plywood Products
+        {
+            "id": "PP-BSL",
+            "name": "PP BSL",
+            "group": "Plywood",
+            "description": "Premium Plus BSL Plywood",
+            "base_price": 595.46,
+            "price_unit": "sq.mt",
+            "thicknesses": ["11"],
+            "sizes": ["2.44 x 1.22"],
+            "pricing_tiers": {
+                "1": 595.46, "2": 580.00, "3": 565.00, 
+                "4": 550.00, "5": 535.00, "6": 520.00
+            }
+        },
+        {
+            "id": "MDF-PP",
+            "name": "MDF PP Plain",
+            "group": "Plywood",
+            "description": "MDF Premium Plus Plain",
+            "base_price": 417.45,
+            "price_unit": "sq.mt",
+            "thicknesses": ["3", "5.5", "7.5", "11", "16", "16.75", "18", "25"],
+            "sizes": ["2.44 x 1.22", "3.05 x 1.22"],
+            "pricing_tiers": {
+                "1": 417.45, "2": 400.00, "3": 385.00, 
+                "4": 370.00, "5": 355.00, "6": 340.00
+            }
+        },
+        # Timber Products  
+        {
+            "id": "HDF-BOIL",
+            "name": "HDF Boil Plus Plain",
+            "group": "Timber",
+            "description": "HDF Boil Plus Plain Board",
+            "base_price": 727.63,
+            "price_unit": "sq.mt",
+            "thicknesses": ["8", "12", "16.75", "18"],
+            "sizes": ["2.44 x 1.22"],
+            "pricing_tiers": {
+                "1": 727.63, "2": 700.00, "3": 680.00, 
+                "4": 660.00, "5": 640.00, "6": 620.00
+            }
+        },
+        {
+            "id": "MDF-DIR",
+            "name": "MDF DIR Plain",
+            "group": "Timber",
+            "description": "MDF DIR Plain Board",
+            "base_price": 260.61,
+            "price_unit": "sq.mt",
+            "thicknesses": ["1.9", "3.3", "5.5", "7", "7.3", "11", "14.5", "16.5", "18", "25"],
+            "sizes": ["2.44 x 1.22"],
+            "pricing_tiers": {
+                "1": 260.61, "2": 250.00, "3": 240.00, 
+                "4": 230.00, "5": 220.00, "6": 210.00
+            }
+        },
+        {
+            "id": "MDF-DWR",
+            "name": "MDF DWR Plain",
+            "group": "Timber",
+            "description": "MDF DWR Plain Board",
+            "base_price": 344.47,
+            "price_unit": "sq.mt",
+            "thicknesses": ["3.3", "5.5", "7.3", "11", "17", "18", "25"],
+            "sizes": ["2.44 x 1.22"],
+            "pricing_tiers": {
+                "1": 344.47, "2": 330.00, "3": 315.00, 
+                "4": 300.00, "5": 285.00, "6": 270.00
+            }
+        },
+        {
+            "id": "MDF-FSP",
+            "name": "MDF FSP Plain",
+            "group": "Timber",
+            "description": "MDF FSP Plain Board",
+            "base_price": 456.94,
+            "price_unit": "sq.mt",
+            "thicknesses": ["5.5", "8", "12", "16.75", "18"],
+            "sizes": ["2.44 x 1.22"],
+            "pricing_tiers": {
+                "1": 456.94, "2": 440.00, "3": 425.00, 
+                "4": 410.00, "5": 395.00, "6": 380.00
+            }
+        }
     ]
-    db.products.insert_many(products)
+    db.products_v2.drop()
+    db.products_v2.insert_many(products)
+
+def init_stock_data():
+    """Initialize stock data by product + thickness + size"""
+    stock_entries = []
     
-    orders = [
-        {"id": "ORD-K9J2L4M1", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Dispatched", "amount": 10711.80, "grand_total": 10711.80, "order_date": "2024-01-15T09:15:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 48, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 36, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-001", "productName": "Oak Finish Trim", "name": "Oak Finish Trim", "quantity": 150, "unitPrice": 14.81, "price": 14.81, "unit": "ea"}], "images": []},
-        {"id": "ORD-A1B2C3D4", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Completed", "amount": 2500.00, "grand_total": 2500.00, "order_date": "2024-01-10T14:30:00Z", "paymentStatus": "Paid", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-003", "productName": "Teak Plywood", "name": "Teak Plywood", "quantity": 10, "unitPrice": 150.00, "price": 150.00, "unit": "ea"}, {"product_id": "TIM-002", "productName": "Pine Stud (2x4)", "name": "Pine Stud (2x4)", "quantity": 181, "unitPrice": 5.50, "price": 5.50, "unit": "ea"}], "images": []},
-        {"id": "ORD-X7Y8Z9W0", "customer_id": 3, "customerName": "Modern Cabinets Ltd", "status": "Created", "amount": 1250.00, "grand_total": 1250.00, "order_date": "2024-01-20T11:00:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-004", "productName": "MDF Board (1/4\")", "name": "MDF Board (1/4\")", "quantity": 50, "unitPrice": 18.50, "price": 18.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 5, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []},
-        {"id": "ORD-P5Q6R7S8", "customer_id": 5, "customerName": "Premium Plyboards", "status": "Approved", "amount": 3450.00, "grand_total": 3450.00, "order_date": "2024-01-18T16:45:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-001", "productName": "Birch Veneer (3/4\")", "name": "Birch Veneer (3/4\")", "quantity": 30, "unitPrice": 85.00, "price": 85.00, "unit": "ea"}, {"product_id": "TIM-003", "productName": "Cedar Decking", "name": "Cedar Decking", "quantity": 40, "unitPrice": 24.99, "price": 24.99, "unit": "ea"}], "images": []},
-        {"id": "ORD-M2N3O4P5", "customer_id": 1, "customerName": "ABC Furniture Works", "status": "Invoiced", "amount": 5250.00, "grand_total": 5250.00, "order_date": "2024-01-12T10:30:00Z", "paymentStatus": "Credit", "sales_person_id": sales_person_id, "salesPerson": "Rahul Sales", "items": [{"product_id": "PLY-002", "productName": "Marine Plywood (1/2\")", "name": "Marine Plywood (1/2\")", "quantity": 30, "unitPrice": 122.50, "price": 122.50, "unit": "ea"}, {"product_id": "TIM-004", "productName": "Walnut Hardwood", "name": "Walnut Hardwood", "quantity": 30, "unitPrice": 45.00, "price": 45.00, "unit": "ea"}], "images": []}
-    ]
-    db.orders.insert_many(orders)
+    products = list(db.products_v2.find({}))
+    for product in products:
+        for thickness in product.get("thicknesses", []):
+            for size in product.get("sizes", []):
+                stock_key = f"{product['id']}_{thickness}_{size.replace(' ', '').replace('x', 'X')}"
+                stock_entries.append({
+                    "stock_key": stock_key,
+                    "product_id": product["id"],
+                    "product_name": product["name"],
+                    "group": product["group"],
+                    "thickness": thickness,
+                    "size": size,
+                    "quantity": 100,  # Default stock
+                    "reserved": 0,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                })
     
-    invoices = [
-        {"id": "INV-K9J2L4M1", "order_id": "ORD-K9J2L4M1", "customer_id": 1, "customerName": "ABC Furniture Works", "issue_date": "2024-01-15", "due_date": "2024-01-30", "sub_total": 9077.80, "cgst": 817.00, "sgst": 817.00, "grand_total": 10711.80, "status": "Paid", "pricing_type": 2},
-        {"id": "INV-A1B2C3D4", "order_id": "ORD-A1B2C3D4", "customer_id": 1, "customerName": "ABC Furniture Works", "issue_date": "2024-01-10", "due_date": "2024-01-25", "sub_total": 2118.64, "cgst": 190.68, "sgst": 190.68, "grand_total": 2500.00, "status": "Paid", "pricing_type": 2},
-        {"id": "INV-M2N3O4P5", "order_id": "ORD-M2N3O4P5", "customer_id": 1, "customerName": "ABC Furniture Works", "issue_date": "2024-01-12", "due_date": "2024-01-27", "sub_total": 4449.15, "cgst": 400.43, "sgst": 400.43, "grand_total": 5250.00, "status": "Pending", "pricing_type": 2},
-        {"id": "INV-P5Q6R7S8", "order_id": "ORD-P5Q6R7S8", "customer_id": 5, "customerName": "Premium Plyboards", "issue_date": "2024-01-18", "due_date": "2024-02-02", "sub_total": 2923.73, "cgst": 263.14, "sgst": 263.14, "grand_total": 3450.00, "status": "Pending", "pricing_type": 2}
-    ]
-    db.invoices.insert_many(invoices)
-    
-    print("Demo data initialized successfully!")
+    db.stock.drop()
+    if stock_entries:
+        db.stock.insert_many(stock_entries)
 
 @app.on_event("startup")
 async def startup_event():
     init_demo_data()
 
-# ============ AUTH ROUTES ============
 @app.get("/api/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+# ============ AUTH ROUTES ============
 
 @app.post("/api/login")
 async def login(request: LoginRequest):
-    # Check if customer login
+    # Customer login
     if request.app_role == "Customer":
         customer = db.customers.find_one({"email": request.email, "password": hash_password(request.password)})
         if not customer:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-        # Check if customer is active
-        if not customer.get("is_active", True):
-            raise HTTPException(status_code=403, detail="Account is deactivated. Please contact support.")
+        if customer.get("approval_status") != "Approved":
+            raise HTTPException(status_code=403, detail="Account not approved")
+        if customer.get("is_active") == False:
+            raise HTTPException(status_code=403, detail="Account is inactive")
         
         token = create_token(f"customer_{customer['id']}", "Customer")
         customer_data = {k: v for k, v in customer.items() if k not in ["_id", "password"]}
-        
         return {"token": token, "user": customer_data}
+    
+    # Sales Person login
+    if request.app_role == "Sales Person":
+        user = db.users.find_one({"email": request.email, "password": hash_password(request.password), "role": "Sales Person"})
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_token(user["email"], user["role"])
+        user_data = serialize_doc(user)
+        del user_data["password"]
+        return {"token": token, "user": user_data}
     
     # Admin/Manager login
     user = db.users.find_one({"email": request.email, "password": hash_password(request.password)})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Use email as user_id for staff users
     token = create_token(user["email"], user["role"])
     user_data = serialize_doc(user)
     del user_data["password"]
@@ -269,41 +410,13 @@ async def login(request: LoginRequest):
     return {"token": token, "user": user_data}
 
 @app.post("/api/logout")
-async def logout(payload: dict = Depends(verify_token)):
-    return {"success": True}
-
-@app.post("/api/register")
-async def register(request: RegisterRequest):
-    existing = db.customers.find_one({"email": request.email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    customer = {
-        "id": get_next_customer_id(),
-        "name": request.name,
-        "contactPerson": request.contactPerson,
-        "phone": request.phone,
-        "email": request.email,
-        "password": hash_password(request.password),
-        "role": "Customer",
-        "approval_status": "Pending",
-        "is_active": True,
-        "pricing_type": 1,
-        "outstanding_balance": 0,
-        "credit_limit": 0,
-        "sales_person_name": None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    db.customers.insert_one(customer)
-    return {"success": True, "message": "Registration submitted. Please wait for admin approval."}
+async def logout():
+    return {"message": "Logged out successfully"}
 
 @app.get("/api/me")
 async def get_me(payload: dict = Depends(verify_token)):
-    user_id = payload["user_id"]
-    role = payload.get("role", "")
+    user_id = payload.get("user_id")
     
-    # Check if customer
     if user_id.startswith("customer_"):
         customer_id = int(user_id.replace("customer_", ""))
         customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
@@ -324,12 +437,856 @@ async def get_me(payload: dict = Depends(verify_token)):
     del user_data["password"]
     return user_data
 
-@app.post("/api/token/refresh")
-async def refresh_token(payload: dict = Depends(verify_token)):
-    new_token = create_token(payload["user_id"], payload["role"])
-    return {"token": new_token}
+@app.post("/api/register")
+async def register(request: RegisterRequest):
+    existing = db.customers.find_one({"email": request.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    new_id = get_next_customer_id()
+    new_customer = {
+        "id": new_id,
+        "email": request.email,
+        "password": hash_password(request.password),
+        "name": request.name,
+        "business_name": request.name,
+        "contactPerson": request.contactPerson,
+        "phone": request.phone,
+        "role": "Customer",
+        "approval_status": "Pending",
+        "is_active": True,
+        "pricing_tier": 1,
+        "outstanding_balance": 0,
+        "credit_limit": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    db.customers.insert_one(new_customer)
+    
+    return {"success": True, "message": "Registration successful. Please wait for admin approval.", "customer_id": new_id}
 
-# ============ PRODUCTS ROUTES ============
+# ============ PRODUCT CATALOG ROUTES (New V2) ============
+
+@app.get("/api/product-groups")
+async def get_product_groups(payload: dict = Depends(verify_token)):
+    """Get all product groups (Plywood, Timber)"""
+    groups = list(db.product_groups.find({}, {"_id": 0}).sort("display_order", 1))
+    return {"groups": groups}
+
+@app.get("/api/products-v2")
+async def get_products_v2(
+    group: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get products with their variants for the new order system"""
+    query = {}
+    if group:
+        query["group"] = group
+    
+    products = list(db.products_v2.find(query, {"_id": 0}))
+    return {"products": products}
+
+@app.get("/api/products-v2/{product_id}")
+async def get_product_v2(product_id: str, payload: dict = Depends(verify_token)):
+    """Get a specific product with all its details"""
+    product = db.products_v2.find_one({"id": product_id}, {"_id": 0})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"product": product}
+
+@app.get("/api/products-v2/{product_id}/stock")
+async def get_product_stock(
+    product_id: str,
+    thickness: Optional[str] = None,
+    size: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get stock for a product with optional thickness and size filters"""
+    query = {"product_id": product_id}
+    if thickness:
+        query["thickness"] = thickness
+    if size:
+        query["size"] = size
+    
+    stock_items = list(db.stock.find(query, {"_id": 0}))
+    return {"stock": stock_items}
+
+@app.get("/api/stock/check")
+async def check_stock(
+    product_id: str,
+    thickness: str,
+    size: str,
+    quantity: int,
+    payload: dict = Depends(verify_token)
+):
+    """Check if requested quantity is available"""
+    stock_key = f"{product_id}_{thickness}_{size.replace(' ', '').replace('x', 'X')}"
+    stock = db.stock.find_one({"stock_key": stock_key})
+    
+    if not stock:
+        return {"available": False, "message": "Product variant not found", "current_stock": 0}
+    
+    available_qty = stock.get("quantity", 0) - stock.get("reserved", 0)
+    is_available = available_qty >= quantity
+    
+    return {
+        "available": is_available,
+        "current_stock": available_qty,
+        "requested": quantity,
+        "message": "In Stock" if is_available else f"Only {available_qty} available"
+    }
+
+@app.get("/api/price/calculate")
+async def calculate_price(
+    product_id: str,
+    customer_id: int,
+    quantity: int,
+    payload: dict = Depends(verify_token)
+):
+    """Calculate price based on customer's pricing tier"""
+    product = db.products_v2.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    customer = db.customers.find_one({"id": customer_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    pricing_tier = str(customer.get("pricing_tier", 1))
+    unit_price = product.get("pricing_tiers", {}).get(pricing_tier, product.get("base_price", 0))
+    total_price = unit_price * quantity
+    
+    return {
+        "product_id": product_id,
+        "product_name": product.get("name"),
+        "pricing_tier": pricing_tier,
+        "unit_price": unit_price,
+        "quantity": quantity,
+        "total_price": total_price,
+        "price_unit": product.get("price_unit", "sq.mt")
+    }
+
+# ============ DIRECT ORDER ROUTES ============
+
+@app.post("/api/orders/direct")
+async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(verify_token)):
+    """Create a direct order - splits into plywood and timber bills internally"""
+    
+    # Validate customer
+    customer = db.customers.find_one({"id": order.customer_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    if customer.get("approval_status") != "Approved":
+        raise HTTPException(status_code=403, detail="Customer account not approved")
+    
+    # Get customer pricing tier
+    pricing_tier = str(customer.get("pricing_tier", 1))
+    
+    # Separate items by group
+    plywood_items = []
+    timber_items = []
+    
+    for item in order.items:
+        # Verify stock availability
+        stock_key = f"{item.product_id}_{item.thickness}_{item.size.replace(' ', '').replace('x', 'X')}"
+        stock = db.stock.find_one({"stock_key": stock_key})
+        
+        if not stock:
+            raise HTTPException(status_code=400, detail=f"Product variant not found: {item.product_name} {item.thickness}mm {item.size}")
+        
+        available_qty = stock.get("quantity", 0) - stock.get("reserved", 0)
+        if available_qty < item.quantity:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for {item.product_name} {item.thickness}mm {item.size}. Available: {available_qty}")
+        
+        # Get correct price based on customer tier
+        product = db.products_v2.find_one({"id": item.product_id})
+        if product:
+            tier_price = product.get("pricing_tiers", {}).get(pricing_tier, product.get("base_price", 0))
+            item_dict = item.dict()
+            item_dict["unit_price"] = tier_price
+            item_dict["total_price"] = tier_price * item.quantity
+        else:
+            item_dict = item.dict()
+        
+        if item.product_group.lower() == "plywood":
+            plywood_items.append(item_dict)
+        else:
+            timber_items.append(item_dict)
+    
+    # Create orders
+    orders_created = []
+    current_time = datetime.now(timezone.utc).isoformat()
+    
+    # Get placer info
+    user_id = payload.get("user_id")
+    placer_role = payload.get("role")
+    placer_name = None
+    
+    if user_id.startswith("customer_"):
+        placer_name = customer.get("contactPerson", customer.get("name"))
+    else:
+        user = db.users.find_one({"email": user_id})
+        if user:
+            placer_name = user.get("name")
+    
+    # Create Plywood order if items exist
+    if plywood_items:
+        plywood_total = sum(item["total_price"] for item in plywood_items)
+        plywood_qty = sum(item["quantity"] for item in plywood_items)
+        
+        plywood_order = {
+            "id": generate_order_id(),
+            "customer_id": order.customer_id,
+            "customerName": customer.get("name"),
+            "order_type": "Plywood",
+            "status": "Pending",  # Pending admin confirmation
+            "items": plywood_items,
+            "total_quantity": plywood_qty,
+            "sub_total": plywood_total,
+            "cgst": round(plywood_total * 0.09, 2),
+            "sgst": round(plywood_total * 0.09, 2),
+            "grand_total": round(plywood_total * 1.18, 2),
+            "pricing_tier": pricing_tier,
+            "photo_reference": order.photo_reference,
+            "notes": order.notes,
+            "placed_by": placer_name,
+            "placed_by_role": placer_role,
+            "order_date": current_time,
+            "created_at": current_time,
+            "updated_at": current_time,
+            "is_editable": True
+        }
+        db.orders_v2.insert_one(plywood_order)
+        orders_created.append({"id": plywood_order["id"], "type": "Plywood", "total": plywood_order["grand_total"]})
+    
+    # Create Timber order if items exist
+    if timber_items:
+        timber_total = sum(item["total_price"] for item in timber_items)
+        timber_qty = sum(item["quantity"] for item in timber_items)
+        
+        timber_order = {
+            "id": generate_order_id(),
+            "customer_id": order.customer_id,
+            "customerName": customer.get("name"),
+            "order_type": "Timber",
+            "status": "Pending",
+            "items": timber_items,
+            "total_quantity": timber_qty,
+            "sub_total": timber_total,
+            "cgst": round(timber_total * 0.09, 2),
+            "sgst": round(timber_total * 0.09, 2),
+            "grand_total": round(timber_total * 1.18, 2),
+            "pricing_tier": pricing_tier,
+            "photo_reference": order.photo_reference,
+            "notes": order.notes,
+            "placed_by": placer_name,
+            "placed_by_role": placer_role,
+            "order_date": current_time,
+            "created_at": current_time,
+            "updated_at": current_time,
+            "is_editable": True
+        }
+        db.orders_v2.insert_one(timber_order)
+        orders_created.append({"id": timber_order["id"], "type": "Timber", "total": timber_order["grand_total"]})
+    
+    total_amount = sum(o["total"] for o in orders_created)
+    
+    return {
+        "success": True,
+        "message": f"Order placed successfully. {len(orders_created)} bill(s) created.",
+        "orders": orders_created,
+        "total_amount": total_amount
+    }
+
+@app.get("/api/orders/v2")
+async def get_orders_v2(
+    page: int = 1,
+    per_page: int = 10,
+    order_type: Optional[str] = None,
+    status: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    search: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get orders with filters"""
+    query = {}
+    
+    user_id = payload.get("user_id")
+    role = payload.get("role")
+    
+    # Customer can only see their orders
+    if user_id.startswith("customer_"):
+        cust_id = int(user_id.replace("customer_", ""))
+        query["customer_id"] = cust_id
+    elif customer_id:
+        query["customer_id"] = customer_id
+    
+    if order_type and order_type != "all":
+        query["order_type"] = order_type
+    
+    if status and status != "all":
+        query["status"] = status
+    
+    if search:
+        query["$or"] = [
+            {"id": {"$regex": search, "$options": "i"}},
+            {"customerName": {"$regex": search, "$options": "i"}}
+        ]
+    
+    total = db.orders_v2.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    orders = list(db.orders_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": orders,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/orders/v2/{order_id}")
+async def get_order_v2(order_id: str, payload: dict = Depends(verify_token)):
+    """Get a specific order"""
+    order = db.orders_v2.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"order": order}
+
+@app.put("/api/orders/v2/{order_id}")
+async def update_order_v2(order_id: str, items: List[OrderItemCreate], payload: dict = Depends(verify_token)):
+    """Update order items (only if order is editable)"""
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if not order.get("is_editable", False):
+        raise HTTPException(status_code=403, detail="Order is locked and cannot be edited")
+    
+    # Verify stock for new items
+    for item in items:
+        stock_key = f"{item.product_id}_{item.thickness}_{item.size.replace(' ', '').replace('x', 'X')}"
+        stock = db.stock.find_one({"stock_key": stock_key})
+        
+        if not stock:
+            raise HTTPException(status_code=400, detail=f"Product variant not found: {item.product_name}")
+        
+        available_qty = stock.get("quantity", 0) - stock.get("reserved", 0)
+        if available_qty < item.quantity:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for {item.product_name}. Available: {available_qty}")
+    
+    # Get customer pricing tier
+    customer = db.customers.find_one({"id": order["customer_id"]})
+    pricing_tier = str(customer.get("pricing_tier", 1)) if customer else "1"
+    
+    # Recalculate with correct prices
+    updated_items = []
+    for item in items:
+        product = db.products_v2.find_one({"id": item.product_id})
+        if product:
+            tier_price = product.get("pricing_tiers", {}).get(pricing_tier, product.get("base_price", 0))
+            item_dict = item.dict()
+            item_dict["unit_price"] = tier_price
+            item_dict["total_price"] = tier_price * item.quantity
+        else:
+            item_dict = item.dict()
+        updated_items.append(item_dict)
+    
+    total = sum(item["total_price"] for item in updated_items)
+    total_qty = sum(item["quantity"] for item in updated_items)
+    
+    db.orders_v2.update_one(
+        {"id": order_id},
+        {"$set": {
+            "items": updated_items,
+            "total_quantity": total_qty,
+            "sub_total": total,
+            "cgst": round(total * 0.09, 2),
+            "sgst": round(total * 0.09, 2),
+            "grand_total": round(total * 1.18, 2),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Order updated successfully"}
+
+@app.post("/api/orders/v2/{order_id}/confirm")
+async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token)):
+    """Admin confirms an order - locks it and deducts stock"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Only admin can confirm orders")
+    
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get("status") != "Pending":
+        raise HTTPException(status_code=400, detail="Order is not in pending status")
+    
+    # Deduct stock
+    for item in order.get("items", []):
+        stock_key = f"{item['product_id']}_{item['thickness']}_{item['size'].replace(' ', '').replace('x', 'X')}"
+        db.stock.update_one(
+            {"stock_key": stock_key},
+            {"$inc": {"quantity": -item["quantity"]}}
+        )
+    
+    # Update order status
+    db.orders_v2.update_one(
+        {"id": order_id},
+        {"$set": {
+            "status": "Confirmed",
+            "is_editable": False,
+            "confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "confirmed_by": payload.get("user_id"),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Create invoice
+    invoice = {
+        "id": generate_invoice_id(),
+        "order_id": order_id,
+        "customer_id": order["customer_id"],
+        "customerName": order.get("customerName"),
+        "order_type": order.get("order_type"),
+        "items": order.get("items", []),
+        "sub_total": order.get("sub_total", 0),
+        "cgst": order.get("cgst", 0),
+        "sgst": order.get("sgst", 0),
+        "grand_total": order.get("grand_total", 0),
+        "pricing_tier": order.get("pricing_tier"),
+        "status": "Pending",
+        "issue_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "due_date": (datetime.now(timezone.utc) + timedelta(days=15)).strftime("%Y-%m-%d"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    db.invoices_v2.insert_one(invoice)
+    
+    return {"success": True, "message": "Order confirmed and invoice generated", "invoice_id": invoice["id"]}
+
+@app.post("/api/orders/v2/{order_id}/cancel")
+async def cancel_order_v2(order_id: str, payload: dict = Depends(verify_token)):
+    """Cancel an order"""
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # If order was confirmed, restore stock
+    if order.get("status") == "Confirmed":
+        for item in order.get("items", []):
+            stock_key = f"{item['product_id']}_{item['thickness']}_{item['size'].replace(' ', '').replace('x', 'X')}"
+            db.stock.update_one(
+                {"stock_key": stock_key},
+                {"$inc": {"quantity": item["quantity"]}}
+            )
+    
+    db.orders_v2.update_one(
+        {"id": order_id},
+        {"$set": {
+            "status": "Cancelled",
+            "is_editable": False,
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Order cancelled"}
+
+# ============ INVOICE ROUTES (V2) ============
+
+@app.get("/api/invoices/v2")
+async def get_invoices_v2(
+    page: int = 1,
+    per_page: int = 10,
+    order_type: Optional[str] = None,
+    status: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get invoices with filters"""
+    query = {}
+    
+    user_id = payload.get("user_id")
+    if user_id.startswith("customer_"):
+        cust_id = int(user_id.replace("customer_", ""))
+        query["customer_id"] = cust_id
+    elif customer_id:
+        query["customer_id"] = customer_id
+    
+    if order_type and order_type != "all":
+        query["order_type"] = order_type
+    
+    if status and status != "all":
+        query["status"] = status
+    
+    total = db.invoices_v2.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    invoices = list(db.invoices_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": invoices,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/invoices/v2/{invoice_id}")
+async def get_invoice_v2(invoice_id: str, payload: dict = Depends(verify_token)):
+    """Get a specific invoice"""
+    invoice = db.invoices_v2.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"invoice": invoice}
+
+@app.put("/api/invoices/v2/{invoice_id}/status")
+async def update_invoice_status_v2(invoice_id: str, status: str = Body(..., embed=True), payload: dict = Depends(verify_token)):
+    """Update invoice status"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Only admin can update invoice status")
+    
+    valid_statuses = ["Pending", "Paid", "Partially Paid", "Overdue", "Cancelled"]
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    result = db.invoices_v2.update_one(
+        {"id": invoice_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    return {"success": True, "message": f"Invoice status updated to {status}"}
+
+# ============ PDF GENERATION ============
+
+@app.get("/api/invoices/v2/{invoice_id}/pdf")
+async def generate_invoice_pdf(invoice_id: str, payload: dict = Depends(verify_token)):
+    """Generate PDF for an invoice (browser-based HTML that can be printed)"""
+    invoice = db.invoices_v2.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    customer = db.customers.find_one({"id": invoice.get("customer_id")}, {"_id": 0, "password": 0})
+    
+    # Generate HTML for PDF
+    items_html = ""
+    for i, item in enumerate(invoice.get("items", []), 1):
+        items_html += f"""
+        <tr>
+            <td>{i}</td>
+            <td>{item.get('product_name', '')}</td>
+            <td>{item.get('thickness', '')}mm</td>
+            <td>{item.get('size', '')}</td>
+            <td>{item.get('quantity', 0)}</td>
+            <td>₹{item.get('unit_price', 0):,.2f}</td>
+            <td>₹{item.get('total_price', 0):,.2f}</td>
+        </tr>
+        """
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Invoice {invoice['id']}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 20px; }}
+            .header {{ display: flex; justify-content: space-between; margin-bottom: 30px; }}
+            .company {{ font-size: 24px; font-weight: bold; color: #c00; }}
+            .invoice-title {{ text-align: right; }}
+            .invoice-title h1 {{ margin: 0; color: #333; }}
+            .details {{ display: flex; justify-content: space-between; margin-bottom: 20px; }}
+            .bill-to, .invoice-info {{ width: 48%; }}
+            .bill-to h3, .invoice-info h3 {{ color: #666; margin-bottom: 10px; }}
+            table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 10px; text-align: left; }}
+            th {{ background: #f5f5f5; }}
+            .totals {{ text-align: right; margin-top: 20px; }}
+            .totals table {{ width: 300px; margin-left: auto; }}
+            .grand-total {{ font-size: 18px; font-weight: bold; background: #c00; color: white; }}
+            .order-type {{ display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: bold; 
+                           background: {('#ff9800' if invoice.get('order_type') == 'Plywood' else '#4caf50')}; color: white; }}
+            @media print {{
+                body {{ padding: 0; }}
+                button {{ display: none; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="company">Natural Plylam</div>
+            <div class="invoice-title">
+                <h1>INVOICE</h1>
+                <p><span class="order-type">{invoice.get('order_type', 'Order')}</span></p>
+            </div>
+        </div>
+        
+        <div class="details">
+            <div class="bill-to">
+                <h3>Bill To:</h3>
+                <p><strong>{customer.get('name', '') if customer else invoice.get('customerName', '')}</strong></p>
+                <p>{customer.get('address', '') if customer else ''}</p>
+                <p>GST: {customer.get('gst_number', 'N/A') if customer else 'N/A'}</p>
+            </div>
+            <div class="invoice-info">
+                <h3>Invoice Details:</h3>
+                <p><strong>Invoice #:</strong> {invoice['id']}</p>
+                <p><strong>Order #:</strong> {invoice.get('order_id', '')}</p>
+                <p><strong>Date:</strong> {invoice.get('issue_date', '')}</p>
+                <p><strong>Due Date:</strong> {invoice.get('due_date', '')}</p>
+                <p><strong>Status:</strong> {invoice.get('status', '')}</p>
+            </div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Product</th>
+                    <th>Thickness</th>
+                    <th>Size</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {items_html}
+            </tbody>
+        </table>
+        
+        <div class="totals">
+            <table>
+                <tr>
+                    <td>Sub Total:</td>
+                    <td>₹{invoice.get('sub_total', 0):,.2f}</td>
+                </tr>
+                <tr>
+                    <td>CGST (9%):</td>
+                    <td>₹{invoice.get('cgst', 0):,.2f}</td>
+                </tr>
+                <tr>
+                    <td>SGST (9%):</td>
+                    <td>₹{invoice.get('sgst', 0):,.2f}</td>
+                </tr>
+                <tr class="grand-total">
+                    <td>Grand Total:</td>
+                    <td>₹{invoice.get('grand_total', 0):,.2f}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <button onclick="window.print()" style="margin-top: 20px; padding: 10px 20px; background: #c00; color: white; border: none; cursor: pointer; border-radius: 4px;">
+            Print / Download PDF
+        </button>
+    </body>
+    </html>
+    """
+    
+    return Response(content=html, media_type="text/html")
+
+# ============ ADMIN DASHBOARD ============
+
+@app.get("/api/admin/dashboard/v2")
+async def get_admin_dashboard_v2(payload: dict = Depends(verify_token)):
+    """Dashboard with separate plywood and timber sections"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get counts
+    pending_orders = db.orders_v2.count_documents({"status": "Pending"})
+    confirmed_orders = db.orders_v2.count_documents({"status": "Confirmed"})
+    
+    plywood_orders = db.orders_v2.count_documents({"order_type": "Plywood"})
+    timber_orders = db.orders_v2.count_documents({"order_type": "Timber"})
+    
+    pending_invoices = db.invoices_v2.count_documents({"status": "Pending"})
+    
+    total_customers = db.customers.count_documents({"approval_status": "Approved"})
+    
+    # Latest orders
+    latest_plywood = list(db.orders_v2.find({"order_type": "Plywood"}, {"_id": 0}).sort("created_at", -1).limit(5))
+    latest_timber = list(db.orders_v2.find({"order_type": "Timber"}, {"_id": 0}).sort("created_at", -1).limit(5))
+    
+    return {
+        "pending_orders": pending_orders,
+        "confirmed_orders": confirmed_orders,
+        "plywood_orders_count": plywood_orders,
+        "timber_orders_count": timber_orders,
+        "pending_invoices": pending_invoices,
+        "total_customers": total_customers,
+        "latest_plywood_orders": latest_plywood,
+        "latest_timber_orders": latest_timber
+    }
+
+# ============ KEEP EXISTING ROUTES FOR BACKWARD COMPATIBILITY ============
+# (Customer routes, old product routes, old order routes - keeping them for the admin panel)
+
+@app.get("/api/customers")
+async def get_customers(
+    page: int = 1,
+    per_page: int = 10,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    payload: dict = Depends(verify_token)
+):
+    query = {}
+    
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}},
+            {"contactPerson": {"$regex": search, "$options": "i"}},
+            {"gst_number": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if status and status != "all":
+        if status == "active":
+            query["approval_status"] = "Approved"
+            query["is_active"] = True
+        elif status == "inactive":
+            query["approval_status"] = "Approved"
+            query["is_active"] = False
+        elif status == "pending":
+            query["approval_status"] = "Pending"
+        elif status == "archived":
+            query["approval_status"] = "Archived"
+    
+    sort_direction = DESCENDING if sort_order == "desc" else ASCENDING
+    total = db.customers.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    customers = list(db.customers.find(query, {"_id": 0, "password": 0}).sort(sort_by, sort_direction).skip(skip).limit(per_page))
+    
+    return {
+        "data": customers,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/customers/{customer_id}")
+async def get_customer(customer_id: int, payload: dict = Depends(verify_token)):
+    customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"customer": customer}
+
+@app.post("/api/customers")
+async def create_customer(customer: CustomerCreate, payload: dict = Depends(verify_token)):
+    existing = db.customers.find_one({"email": customer.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    
+    new_id = get_next_customer_id()
+    new_customer = {
+        "id": new_id,
+        **customer.dict(),
+        "role": "Customer",
+        "approval_status": "Approved",
+        "is_active": True,
+        "outstanding_balance": 0,
+        "password": hash_password("customer123"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Handle pricing_tier vs pricing_type compatibility
+    if "pricing_type" in new_customer:
+        new_customer["pricing_tier"] = new_customer.pop("pricing_type", 1)
+    
+    db.customers.insert_one(new_customer)
+    del new_customer["_id"]
+    del new_customer["password"]
+    
+    return {"success": True, "customer": new_customer}
+
+@app.put("/api/customers/{customer_id}")
+async def update_customer(customer_id: int, customer: CustomerUpdate, payload: dict = Depends(verify_token)):
+    existing = db.customers.find_one({"id": customer_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    update_data = {k: v for k, v in customer.dict().items() if v is not None}
+    
+    # Handle pricing_tier vs pricing_type compatibility
+    if "pricing_type" in update_data:
+        update_data["pricing_tier"] = update_data.pop("pricing_type")
+    
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    db.customers.update_one({"id": customer_id}, {"$set": update_data})
+    
+    updated = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
+    return {"success": True, "customer": updated}
+
+@app.post("/api/customers/{customer_id}/approve")
+async def approve_customer(customer_id: int, payload: dict = Depends(verify_token)):
+    result = db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"approval_status": "Approved", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True, "message": "Customer approved"}
+
+@app.post("/api/customers/{customer_id}/reject")
+async def reject_customer(customer_id: int, payload: dict = Depends(verify_token)):
+    result = db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"approval_status": "Rejected", "is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True, "message": "Customer rejected"}
+
+@app.patch("/api/customers/{customer_id}/status")
+async def toggle_customer_status(customer_id: int, is_active: bool = Body(..., embed=True), payload: dict = Depends(verify_token)):
+    result = db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"is_active": is_active, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True, "message": f"Customer {'activated' if is_active else 'deactivated'}"}
+
+@app.delete("/api/customers/{customer_id}")
+async def delete_customer(customer_id: int, payload: dict = Depends(verify_token)):
+    result = db.customers.delete_one({"id": customer_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True, "message": "Customer deleted"}
+
+@app.post("/api/customers/{customer_id}/archive")
+async def archive_customer(customer_id: int, payload: dict = Depends(verify_token)):
+    result = db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"approval_status": "Archived", "is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"success": True, "message": "Customer archived"}
+
+# ============ OLD PRODUCT ROUTES (for admin panel compatibility) ============
+
 @app.get("/api/products")
 async def get_products(
     search: Optional[str] = None,
@@ -346,355 +1303,220 @@ async def get_products(
         query["category"] = category
     
     products = list(db.products.find(query, {"_id": 0}))
-    return {"data": products, "products": products}
-
-def get_next_product_id(category: str) -> str:
-    prefix = "PLY" if category == "Plywood" else "TIM"
-    existing = list(db.products.find({"id": {"$regex": f"^{prefix}-"}}, {"id": 1}))
-    if not existing:
-        return f"{prefix}-001"
-    max_num = 0
-    for p in existing:
-        try:
-            num = int(p["id"].split("-")[1])
-            if num > max_num:
-                max_num = num
-        except (ValueError, IndexError, KeyError):
-            pass
-    return f"{prefix}-{str(max_num + 1).zfill(3)}"
+    return {"products": products, "data": products}
 
 @app.get("/api/products/{product_id}")
-async def get_product(
-    product_id: str,
-    payload: dict = Depends(verify_token)
-):
+async def get_product(product_id: str, payload: dict = Depends(verify_token)):
     product = db.products.find_one({"id": product_id}, {"_id": 0})
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return {"data": product}
+    return {"product": product}
 
 @app.post("/api/products")
-async def create_product(
-    body: dict = Body(...),
-    payload: dict = Depends(verify_token)
-):
-    if not body.get("name") or not body.get("category"):
-        raise HTTPException(status_code=400, detail="Name and category are required")
+async def create_product(product: dict = Body(...), payload: dict = Depends(verify_token)):
+    if not product.get("id"):
+        prefix = "PLY" if product.get("category") == "Plywood" else "TIM"
+        count = db.products.count_documents({"category": product.get("category")})
+        product["id"] = f"{prefix}-{count + 1:03d}"
     
-    # Check if product with same name exists
-    existing = db.products.find_one({"name": body.get("name")})
+    existing = db.products.find_one({"id": product["id"]})
     if existing:
-        raise HTTPException(status_code=400, detail="Product with this name already exists")
-    
-    product_id = body.get("id") or get_next_product_id(body.get("category", "Plywood"))
-    base_price = float(body.get("price", 0))
-    
-    # Use provided pricing_rates or calculate defaults
-    provided_rates = body.get("pricing_rates", {})
-    pricing_rates = {
-        "1": float(provided_rates.get("1", base_price)),
-        "2": float(provided_rates.get("2", base_price * 0.95)),
-        "3": float(provided_rates.get("3", base_price * 0.90))
-    }
-    
-    product = {
-        "id": product_id,
-        "name": body.get("name"),
-        "category": body.get("category"),
-        "price": base_price,
-        "priceUnit": body.get("priceUnit", "ea"),
-        "stock_status": body.get("stock_status", "in_stock"),
-        "stock_quantity": int(body.get("stock_quantity", 0)),
-        "description": body.get("description", ""),
-        "primary_image": body.get("primary_image", ""),
-        "pricing_rates": pricing_rates,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
+        raise HTTPException(status_code=400, detail="Product ID already exists")
     
     db.products.insert_one(product)
-    del product["_id"]
-    
-    return {"success": True, "message": "Product created successfully", "data": product}
+    product.pop("_id", None)
+    return {"success": True, "product": product}
 
 @app.put("/api/products/{product_id}")
-async def update_product(
-    product_id: str,
-    body: dict = Body(...),
-    payload: dict = Depends(verify_token)
-):
+async def update_product(product_id: str, product: dict = Body(...), payload: dict = Depends(verify_token)):
     existing = db.products.find_one({"id": product_id})
     if not existing:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Check name uniqueness if name is being updated
-    if body.get("name") and body.get("name") != existing.get("name"):
-        name_exists = db.products.find_one({"name": body.get("name"), "id": {"$ne": product_id}})
-        if name_exists:
-            raise HTTPException(status_code=400, detail="Product with this name already exists")
+    product.pop("_id", None)
+    product.pop("id", None)
     
-    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    
-    allowed_fields = ["name", "category", "price", "priceUnit", "stock_status", 
-                      "stock_quantity", "description", "primary_image", "pricing_rates"]
-    
-    for field in allowed_fields:
-        if field in body:
-            if field == "price":
-                update_data[field] = float(body[field])
-            elif field == "stock_quantity":
-                update_data[field] = int(body[field])
-            else:
-                update_data[field] = body[field]
-    
-    db.products.update_one({"id": product_id}, {"$set": update_data})
-    
+    db.products.update_one({"id": product_id}, {"$set": product})
     updated = db.products.find_one({"id": product_id}, {"_id": 0})
-    return {"success": True, "message": "Product updated successfully", "data": updated}
+    return {"success": True, "product": updated}
 
 @app.delete("/api/products/{product_id}")
-async def delete_product(
-    product_id: str,
-    payload: dict = Depends(verify_token)
-):
-    existing = db.products.find_one({"id": product_id})
-    if not existing:
+async def delete_product(product_id: str, payload: dict = Depends(verify_token)):
+    result = db.products.delete_one({"id": product_id})
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Check if product is used in any orders
-    orders_with_product = db.orders.count_documents({"items.product_id": product_id})
-    if orders_with_product > 0:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Cannot delete product used in {orders_with_product} orders"
-        )
-    
-    db.products.delete_one({"id": product_id})
-    return {"success": True, "message": "Product deleted successfully"}
+    return {"success": True, "message": "Product deleted"}
 
-# ============ ORDERS ROUTES ============
+# ============ OLD ORDER ROUTES (for admin panel compatibility) ============
+
 @app.get("/api/orders")
-async def get_orders_endpoint(
-    id: Optional[str] = None,
+async def get_orders(
+    page: int = 1,
+    per_page: int = 10,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    if id:
-        order = db.orders.find_one({"id": id}, {"_id": 0})
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-        return order
+    query = {}
     
-    orders = list(db.orders.find({}, {"_id": 0}).sort("order_date", -1))
-    return orders
+    user_id = payload.get("user_id")
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+        query["customer_id"] = customer_id
+    
+    if search:
+        query["$or"] = [
+            {"id": {"$regex": search, "$options": "i"}},
+            {"customerName": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if status and status != "all":
+        query["status"] = status
+    
+    total = db.orders.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    orders = list(db.orders.find(query, {"_id": 0}).sort("order_date", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": orders,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
 
-# ============ INVOICES ROUTES ============
+@app.get("/api/orders/{order_id}")
+async def get_order(order_id: str, payload: dict = Depends(verify_token)):
+    order = db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+@app.post("/api/orders/{order_id}/status")
+async def update_order_status(order_id: str, status: str = Body(..., embed=True), payload: dict = Depends(verify_token)):
+    result = db.orders.update_one({"id": order_id}, {"$set": {"status": status}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"success": True, "message": f"Order status updated to {status}"}
+
+# ============ OLD INVOICE ROUTES ============
+
 @app.get("/api/invoices")
-async def get_invoices_endpoint(
-    id: Optional[str] = None,
+async def get_invoices(
+    page: int = 1,
+    per_page: int = 10,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    if id:
-        invoice = db.invoices.find_one({"id": id}, {"_id": 0})
-        if not invoice:
-            raise HTTPException(status_code=404, detail="Invoice not found")
-        return {"data": invoice}
+    query = {}
     
-    invoices = list(db.invoices.find({}, {"_id": 0}).sort("issue_date", -1))
-    return invoices
+    user_id = payload.get("user_id")
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+        query["customer_id"] = customer_id
+    
+    if search:
+        query["$or"] = [
+            {"id": {"$regex": search, "$options": "i"}},
+            {"order_id": {"$regex": search, "$options": "i"}},
+            {"customerName": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if status and status != "all":
+        query["status"] = status
+    
+    total = db.invoices.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    invoices = list(db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": invoices,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/invoices/{invoice_id}")
+async def get_invoice(invoice_id: str, payload: dict = Depends(verify_token)):
+    invoice = db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
 
 @app.put("/api/invoices/{invoice_id}")
-async def update_invoice(
-    invoice_id: str,
-    body: dict = Body(...),
-    payload: dict = Depends(verify_token)
-):
-    existing = db.invoices.find_one({"id": invoice_id})
-    if not existing:
+async def update_invoice(invoice_id: str, status: str = Body(..., embed=True), payload: dict = Depends(verify_token)):
+    result = db.invoices.update_one({"id": invoice_id}, {"$set": {"status": status}})
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
-    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    
-    allowed_fields = ["status", "due_date", "notes"]
-    valid_statuses = ["Pending", "Paid", "Overdue", "Cancelled", "Partially Paid"]
-    
-    for field in allowed_fields:
-        if field in body:
-            if field == "status" and body[field] not in valid_statuses:
-                raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
-            update_data[field] = body[field]
-    
-    db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
-    
-    updated = db.invoices.find_one({"id": invoice_id}, {"_id": 0})
-    return {"success": True, "message": "Invoice updated successfully", "data": updated}
+    return {"success": True, "message": f"Invoice status updated to {status}"}
 
-# ============ CUSTOMERS CRUD ROUTES ============
-@app.get("/api/customers")
-async def get_customers_list(
-    action: Optional[str] = None,
+# ============ ADMIN ROUTES ============
+
+@app.get("/api/admin")
+async def admin_resource(
+    resource: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    if action == "me":
-        user = db.users.find_one({"_id": ObjectId(payload["user_id"])})
-        if user:
-            user_data = serialize_doc(user)
-            del user_data["password"]
-            return user_data
-        raise HTTPException(status_code=404, detail="User not found")
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
     
-    customers = list(db.customers.find({}, {"_id": 0, "password": 0}))
-    return customers
-
-@app.get("/api/customers/{customer_id}")
-async def get_customer(
-    customer_id: int,
-    payload: dict = Depends(verify_token)
-):
-    customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    # Get customer orders and invoices for stats
-    orders = list(db.orders.find({"customer_id": customer_id}, {"_id": 0}))
-    invoices = list(db.invoices.find({"customer_id": customer_id}, {"_id": 0}))
-    
-    customer["orders"] = orders
-    customer["invoices"] = invoices
-    customer["total_orders"] = len(orders)
-    customer["total_invoices"] = len(invoices)
-    
-    return {"data": customer}
-
-@app.post("/api/customers")
-async def create_customer(
-    action: Optional[str] = None,
-    body: dict = Body(default={}),
-    payload: dict = Depends(verify_token)
-):
-    if action == "change_password":
-        current_password = body.get("current_password")
-        new_password = body.get("new_password")
+    if resource == "dashboard":
+        pending_orders = db.orders.count_documents({"status": {"$in": ["Created", "Pending"]}})
+        week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        new_orders_week = db.orders.count_documents({"order_date": {"$gte": week_ago}})
+        due_invoices = db.invoices.count_documents({"status": "Pending"})
+        pending_customers = db.customers.count_documents({"approval_status": "Pending"})
+        total_customers = db.customers.count_documents({})
+        active_customers = db.customers.count_documents({"approval_status": "Approved", "is_active": True})
         
-        user = db.users.find_one({"_id": ObjectId(payload["user_id"]), "password": hash_password(current_password)})
-        if not user:
-            raise HTTPException(status_code=400, detail="Current password is incorrect")
-        
-        db.users.update_one({"_id": ObjectId(payload["user_id"])}, {"$set": {"password": hash_password(new_password)}})
-        return {"success": True, "message": "Password changed successfully"}
+        return {
+            "pending_orders_count": pending_orders,
+            "new_orders_week": new_orders_week,
+            "due_invoices_count": due_invoices,
+            "pending_customers": pending_customers,
+            "total_customers": total_customers,
+            "active_customers": active_customers
+        }
     
-    # Create new customer
-    if not body.get("name") or not body.get("email"):
-        raise HTTPException(status_code=400, detail="Name and email are required")
-    
-    # Check if email already exists
-    existing = db.customers.find_one({"email": body.get("email")})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    customer = {
-        "id": get_next_customer_id(),
-        "name": body.get("name"),
-        "contactPerson": body.get("contactPerson", ""),
-        "phone": body.get("phone", ""),
-        "email": body.get("email"),
-        "gst_number": body.get("gst_number", ""),
-        "address": body.get("address", ""),
-        "city": body.get("city", ""),
-        "state": body.get("state", ""),
-        "pincode": body.get("pincode", ""),
-        "pricing_type": body.get("pricing_type", 1),
-        "credit_limit": body.get("credit_limit", 0),
-        "notes": body.get("notes", ""),
-        "role": "Customer",
-        "approval_status": body.get("approval_status", "Approved"),
-        "is_active": body.get("is_active", True),
-        "outstanding_balance": 0,
-        "sales_person_name": None,
-        "password": hash_password("customer123"),  # Default password
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    db.customers.insert_one(customer)
-    del customer["_id"]
-    del customer["password"]
-    
-    return {"success": True, "message": "Customer created successfully", "data": customer}
+    raise HTTPException(status_code=400, detail="Invalid resource")
 
-@app.put("/api/customers/{customer_id}")
-async def update_customer(
-    customer_id: int,
-    body: dict = Body(...),
+@app.post("/api/admin")
+async def admin_action(
+    action: Optional[str] = None,
+    data: dict = Body(None),
     payload: dict = Depends(verify_token)
 ):
-    existing = db.customers.find_one({"id": customer_id})
-    if not existing:
-        raise HTTPException(status_code=404, detail="Customer not found")
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Check email uniqueness if email is being updated
-    if body.get("email") and body.get("email") != existing.get("email"):
-        email_exists = db.customers.find_one({"email": body.get("email"), "id": {"$ne": customer_id}})
-        if email_exists:
-            raise HTTPException(status_code=400, detail="Email already in use by another customer")
+    if action == "update_order_status":
+        order_id = data.get("order_id")
+        status = data.get("status")
+        result = db.orders.update_one({"id": order_id}, {"$set": {"status": status}})
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Order not found")
+        return {"success": True}
     
-    update_data = {
-        "updated_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    allowed_fields = ["name", "contactPerson", "phone", "email", "gst_number", "address", 
-                      "city", "state", "pincode", "pricing_type", "credit_limit", "notes",
-                      "approval_status", "is_active"]
-    
-    for field in allowed_fields:
-        if field in body:
-            update_data[field] = body[field]
-    
-    db.customers.update_one({"id": customer_id}, {"$set": update_data})
-    
-    updated = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
-    return {"success": True, "message": "Customer updated successfully", "data": updated}
+    raise HTTPException(status_code=400, detail="Invalid action")
 
-@app.delete("/api/customers/{customer_id}")
-async def delete_customer(
-    customer_id: int,
-    hard_delete: bool = Query(False),
-    payload: dict = Depends(verify_token)
-):
-    existing = db.customers.find_one({"id": customer_id})
-    if not existing:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    # Check if customer has orders
-    orders_count = db.orders.count_documents({"customer_id": customer_id})
-    
-    if hard_delete:
-        if orders_count > 0:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Cannot delete customer with {orders_count} orders. Archive instead."
-            )
-        db.customers.delete_one({"id": customer_id})
-        return {"success": True, "message": "Customer permanently deleted"}
-    else:
-        # Soft delete (archive)
-        db.customers.update_one(
-            {"id": customer_id}, 
-            {"$set": {
-                "is_active": False, 
-                "approval_status": "Archived",
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
-        return {"success": True, "message": "Customer archived successfully"}
-
-# ============ USER MANAGEMENT ROUTES (Super Admin Only) ============
+# ============ USER MANAGEMENT (Super Admin Only) ============
 
 class UserCreate(BaseModel):
     name: str = Field(..., min_length=1)
     email: str = Field(..., min_length=1)
     password: str = Field(..., min_length=6)
     phone: Optional[str] = None
-    role: str = Field(..., pattern="^(Super Admin|Admin|Sales Person)$")
+    role: str = Field(..., pattern="^(Super Admin|Admin|Manager|Sales Person)$")
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -704,7 +1526,6 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 def require_super_admin(payload: dict):
-    """Check if user is Super Admin"""
     role = payload.get("role", "").lower()
     if role != "super admin":
         raise HTTPException(status_code=403, detail="Super Admin access required")
@@ -718,7 +1539,6 @@ async def list_users(
     role: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    """List all staff users (Super Admin only)"""
     require_super_admin(payload)
     
     skip = (page - 1) * per_page
@@ -737,7 +1557,6 @@ async def list_users(
     total = db.users.count_documents(query)
     users = list(db.users.find(query, {"_id": 0, "password": 0}).sort("created_at", -1).skip(skip).limit(per_page))
     
-    # Add id field from _id if not present
     for user in users:
         if "_id" in user:
             user["id"] = str(user.pop("_id"))
@@ -752,30 +1571,10 @@ async def list_users(
         }
     }
 
-@app.get("/api/users/{user_email}")
-async def get_user(
-    user_email: str,
-    payload: dict = Depends(verify_token)
-):
-    """Get a specific user (Super Admin only)"""
-    require_super_admin(payload)
-    
-    user = db.users.find_one({"email": user_email}, {"password": 0})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    user["id"] = str(user.pop("_id"))
-    return {"user": user}
-
 @app.post("/api/users")
-async def create_user(
-    data: UserCreate,
-    payload: dict = Depends(verify_token)
-):
-    """Create a new staff user (Super Admin only)"""
+async def create_user(data: UserCreate, payload: dict = Depends(verify_token)):
     require_super_admin(payload)
     
-    # Check if email already exists
     existing = db.users.find_one({"email": data.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -788,7 +1587,7 @@ async def create_user(
         "phone": data.phone or "",
         "approval_status": "Approved",
         "is_active": True,
-        "pricing_type": 1,
+        "pricing_tier": 1,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
@@ -801,19 +1600,13 @@ async def create_user(
     return {"success": True, "message": "User created successfully", "user": new_user}
 
 @app.put("/api/users/{user_email}")
-async def update_user(
-    user_email: str,
-    data: UserUpdate,
-    payload: dict = Depends(verify_token)
-):
-    """Update a staff user (Super Admin only)"""
+async def update_user(user_email: str, data: UserUpdate, payload: dict = Depends(verify_token)):
     require_super_admin(payload)
     
     existing = db.users.find_one({"email": user_email})
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Prevent changing own role
     if user_email == payload.get("user_id") and data.role and data.role != existing.get("role"):
         raise HTTPException(status_code=400, detail="Cannot change your own role")
     
@@ -822,7 +1615,6 @@ async def update_user(
     if data.name is not None:
         update_data["name"] = data.name
     if data.email is not None and data.email != user_email:
-        # Check if new email exists
         if db.users.find_one({"email": data.email}):
             raise HTTPException(status_code=400, detail="Email already in use")
         update_data["email"] = data.email
@@ -841,22 +1633,16 @@ async def update_user(
     return {"success": True, "message": "User updated successfully", "user": updated_user}
 
 @app.delete("/api/users/{user_email}")
-async def delete_user(
-    user_email: str,
-    payload: dict = Depends(verify_token)
-):
-    """Delete a staff user (Super Admin only)"""
+async def delete_user(user_email: str, payload: dict = Depends(verify_token)):
     require_super_admin(payload)
     
     existing = db.users.find_one({"email": user_email})
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Prevent self-deletion
     if user_email == payload.get("user_id"):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     
-    # Prevent deleting the last Super Admin
     if existing.get("role") == "Super Admin":
         super_admin_count = db.users.count_documents({"role": "Super Admin"})
         if super_admin_count <= 1:
@@ -866,517 +1652,29 @@ async def delete_user(
     
     return {"success": True, "message": "User deleted successfully"}
 
-# ============ ADMIN ROUTES ============
-@app.get("/api/admin")
-async def admin_resource(
-    resource: Optional[str] = None,
-    action: Optional[str] = None,
-    page: int = 1,
-    per_page: int = 10,
-    search: Optional[str] = None,
-    status: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_order: Optional[str] = "asc",
-    payload: dict = Depends(verify_token)
-):
-    if resource == "dashboard":
-        pending_orders = db.orders.count_documents({"status": {"$in": ["Created", "Pending"]}})
-        new_orders_week = db.orders.count_documents({})
-        due_invoices = db.invoices.count_documents({"status": {"$ne": "Paid"}})
-        pending_customers = db.customers.count_documents({"approval_status": "Pending"})
-        total_customers = db.customers.count_documents({})
-        active_customers = db.customers.count_documents({"is_active": True, "approval_status": "Approved"})
-        
-        return {
-            "pending_orders_count": pending_orders,
-            "new_orders_week": new_orders_week,
-            "due_invoices_count": due_invoices,
-            "pending_customers": pending_customers,
-            "total_customers": total_customers,
-            "active_customers": active_customers
-        }
-    
-    if resource == "orders":
-        skip = (page - 1) * per_page
-        query = {}
-        if search:
-            query["$or"] = [
-                {"id": {"$regex": search, "$options": "i"}},
-                {"customerName": {"$regex": search, "$options": "i"}}
-            ]
-        
-        total = db.orders.count_documents(query)
-        orders = list(db.orders.find(query, {"_id": 0}).sort("order_date", -1).skip(skip).limit(per_page))
-        
-        return {
-            "data": orders,
-            "pagination": {"page": page, "per_page": per_page, "total": total, "total_pages": (total + per_page - 1) // per_page}
-        }
-    
-    if resource == "invoices":
-        skip = (page - 1) * per_page
-        query = {}
-        if search:
-            query["$or"] = [
-                {"id": {"$regex": search, "$options": "i"}},
-                {"customerName": {"$regex": search, "$options": "i"}}
-            ]
-        
-        total = db.invoices.count_documents(query)
-        invoices = list(db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).skip(skip).limit(per_page))
-        
-        return {
-            "data": invoices,
-            "pagination": {"page": page, "per_page": per_page, "total": total, "total_pages": (total + per_page - 1) // per_page}
-        }
-    
-    if resource == "customers":
-        skip = (page - 1) * per_page
-        query = {}
-        
-        if search:
-            query["$or"] = [
-                {"name": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}},
-                {"contactPerson": {"$regex": search, "$options": "i"}},
-                {"phone": {"$regex": search, "$options": "i"}},
-                {"gst_number": {"$regex": search, "$options": "i"}}
-            ]
-        
-        if status:
-            if status == "active":
-                query["is_active"] = True
-                query["approval_status"] = "Approved"
-            elif status == "inactive":
-                query["is_active"] = False
-            elif status == "pending":
-                query["approval_status"] = "Pending"
-            elif status == "archived":
-                query["approval_status"] = "Archived"
-            elif status == "rejected":
-                query["approval_status"] = "Rejected"
-        
-        # Sorting
-        sort_field = sort_by or "created_at"
-        sort_direction = DESCENDING if sort_order == "desc" else ASCENDING
-        
-        # Map frontend sort fields to DB fields
-        sort_map = {
-            "name": "name",
-            "email": "email", 
-            "created_at": "created_at",
-            "outstanding_balance": "outstanding_balance",
-            "pricing_type": "pricing_type"
-        }
-        sort_field = sort_map.get(sort_field, "created_at")
-        
-        total = db.customers.count_documents(query)
-        customers = list(db.customers.find(query, {"_id": 0, "password": 0}).sort(sort_field, sort_direction).skip(skip).limit(per_page))
-        
-        return {
-            "data": customers,
-            "pagination": {"page": page, "per_page": per_page, "total": total, "total_pages": (total + per_page - 1) // per_page}
-        }
-    
-    return {"error": "Unknown resource"}
+# ============ SALES PORTAL ROUTES ============
 
-@app.post("/api/admin")
-async def admin_action(
-    action: Optional[str] = None,
-    body: dict = Body(...),
-    payload: dict = Depends(verify_token)
-):
-    if action == "update_order_status":
-        order_id = body.get("order_id")
-        status = body.get("status")
-        result = db.orders.update_one({"id": order_id}, {"$set": {"status": status}})
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Order not found")
-        return {"success": True, "message": f"Order status updated to {status}"}
-    
-    if action == "mark_invoice_paid":
-        invoice_id = body.get("invoice_id")
-        result = db.invoices.update_one({"id": invoice_id}, {"$set": {"status": "Paid"}})
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Invoice not found")
-        return {"success": True, "message": "Invoice marked as paid"}
-    
-    if action == "approve_customer":
-        customer_id = body.get("customer_id")
-        result = db.customers.update_one(
-            {"id": customer_id}, 
-            {"$set": {"approval_status": "Approved", "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Customer not found")
-        return {"success": True, "message": "Customer approved"}
-    
-    if action == "reject_customer":
-        customer_id = body.get("customer_id")
-        reason = body.get("reason", "")
-        result = db.customers.update_one(
-            {"id": customer_id}, 
-            {"$set": {
-                "approval_status": "Rejected", 
-                "notes": reason,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Customer not found")
-        return {"success": True, "message": "Customer rejected"}
-    
-    if action == "toggle_customer_status":
-        customer_id = body.get("customer_id")
-        is_active = body.get("is_active")
-        result = db.customers.update_one(
-            {"id": customer_id}, 
-            {"$set": {"is_active": is_active, "updated_at": datetime.now(timezone.utc).isoformat()}}
-        )
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Customer not found")
-        status_text = "activated" if is_active else "deactivated"
-        return {"success": True, "message": f"Customer {status_text}"}
-    
-    return {"error": "Unknown action"}
-
-
-
-# ============ CUSTOMER PORTAL HELPER ============
-def get_customer_id_from_token(payload: dict) -> int:
-    """Extract customer ID from JWT payload"""
-    user_id = payload.get("user_id", "")
-    if not user_id.startswith("customer_"):
-        raise HTTPException(status_code=403, detail="Customer access required")
-    return int(user_id.replace("customer_", ""))
-
-# ============ CUSTOMER CART ROUTES ============
-@app.get("/api/cart")
-async def get_cart(payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    cart = db.carts.find_one({"customer_id": customer_id}, {"_id": 0})
-    if not cart:
-        return []
-    return cart.get("items", [])
-
-@app.post("/api/cart")
-async def add_to_cart(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    product_id = body.get("product_id")
-    quantity = int(body.get("quantity", 1))
-    
-    # Get product details
-    product = db.products.find_one({"id": product_id}, {"_id": 0})
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Get customer pricing type
-    customer = db.customers.find_one({"id": customer_id})
-    pricing_type = str(customer.get("pricing_type", 1))
-    price = product.get("pricing_rates", {}).get(pricing_type, product.get("price", 0))
-    
-    # Get or create cart
-    cart = db.carts.find_one({"customer_id": customer_id})
-    if not cart:
-        cart = {"customer_id": customer_id, "items": []}
-        db.carts.insert_one(cart)
-    
-    items = cart.get("items", [])
-    
-    # Check if product already in cart
-    found = False
-    for item in items:
-        if item["product_id"] == product_id:
-            item["quantity"] = quantity
-            item["price"] = float(price)
-            found = True
-            break
-    
-    if not found:
-        items.append({
-            "product_id": product_id,
-            "name": product.get("name"),
-            "quantity": quantity,
-            "price": float(price),
-            "unit": product.get("priceUnit", "ea"),
-            "priceUnit": product.get("priceUnit", "ea")
-        })
-    
-    db.carts.update_one(
-        {"customer_id": customer_id}, 
-        {"$set": {"items": items}},
-        upsert=True
-    )
-    
-    return {"success": True, "message": "Cart updated"}
-
-@app.delete("/api/cart")
-async def clear_or_remove_cart(
-    product_id: Optional[str] = None,
-    payload: dict = Depends(verify_token)
-):
-    customer_id = get_customer_id_from_token(payload)
-    
-    if product_id:
-        # Remove specific product
-        cart = db.carts.find_one({"customer_id": customer_id})
-        if cart:
-            items = [item for item in cart.get("items", []) if item["product_id"] != product_id]
-            db.carts.update_one({"customer_id": customer_id}, {"$set": {"items": items}})
-        return {"success": True, "message": "Item removed from cart"}
-    else:
-        # Clear entire cart
-        db.carts.delete_one({"customer_id": customer_id})
-        return {"success": True, "message": "Cart cleared"}
-
-# ============ CUSTOMER CHECKOUT ROUTE ============
-@app.post("/api/checkout")
-async def customer_checkout(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    shipping_address = body.get("shipping_address", "")
-    
-    # Get cart
-    cart = db.carts.find_one({"customer_id": customer_id})
-    if not cart or not cart.get("items"):
-        raise HTTPException(status_code=400, detail="Cart is empty")
-    
-    items = cart.get("items", [])
-    
-    # Get customer details
-    customer = db.customers.find_one({"id": customer_id})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    
-    # Check if customer is approved
-    if customer.get("approval_status") != "Approved":
-        raise HTTPException(status_code=403, detail="Your account is pending approval")
-    
-    # Calculate total
-    total = sum(item["price"] * item["quantity"] for item in items)
-    
-    # Generate order ID
-    order_count = db.orders.count_documents({})
-    order_id = f"ORD-{secrets.token_hex(4).upper()}"
-    
-    # Create order
-    order = {
-        "id": order_id,
-        "customer_id": customer_id,
-        "customerName": customer.get("name"),
-        "status": "Created",
-        "amount": total,
-        "grand_total": total,
-        "order_date": datetime.now(timezone.utc).isoformat(),
-        "paymentStatus": "Credit",
-        "sales_person_id": None,
-        "salesPerson": None,
-        "shipping_address": shipping_address or customer.get("address", ""),
-        "pricing_type": customer.get("pricing_type", 1),
-        "items": [
-            {
-                "product_id": item["product_id"],
-                "productName": item["name"],
-                "name": item["name"],
-                "quantity": item["quantity"],
-                "unitPrice": item["price"],
-                "price": item["price"],
-                "unit": item.get("unit", "ea")
-            }
-            for item in items
-        ],
-        "images": [],
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    db.orders.insert_one(order)
-    
-    # Clear cart after checkout
-    db.carts.delete_one({"customer_id": customer_id})
-    
-    return {"success": True, "order_id": order_id, "message": "Order placed successfully"}
-
-# ============ CUSTOMER ORDERS ROUTES ============
-@app.get("/api/customer/orders")
-async def get_customer_orders(
-    page: int = 1,
-    per_page: int = 10,
-    payload: dict = Depends(verify_token)
-):
-    customer_id = get_customer_id_from_token(payload)
-    skip = (page - 1) * per_page
-    
-    query = {"customer_id": customer_id}
-    total = db.orders.count_documents(query)
-    orders = list(db.orders.find(query, {"_id": 0}).sort("order_date", -1).skip(skip).limit(per_page))
-    
-    return {
-        "data": orders,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": (total + per_page - 1) // per_page
-        }
-    }
-
-@app.get("/api/customer/orders/{order_id}")
-async def get_customer_order(order_id: str, payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    order = db.orders.find_one({"id": order_id, "customer_id": customer_id}, {"_id": 0})
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    return order
-
-# ============ CUSTOMER INVOICES ROUTES ============
-@app.get("/api/customer/invoices")
-async def get_customer_invoices(
-    page: int = 1,
-    per_page: int = 10,
-    payload: dict = Depends(verify_token)
-):
-    customer_id = get_customer_id_from_token(payload)
-    skip = (page - 1) * per_page
-    
-    query = {"customer_id": customer_id}
-    total = db.invoices.count_documents(query)
-    invoices = list(db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).skip(skip).limit(per_page))
-    
-    return {
-        "data": invoices,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": (total + per_page - 1) // per_page
-        }
-    }
-
-@app.get("/api/customer/invoices/{invoice_id}")
-async def get_customer_invoice(invoice_id: str, payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    invoice = db.invoices.find_one({"id": invoice_id, "customer_id": customer_id}, {"_id": 0})
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Invoice not found")
-    return {"data": invoice}
-
-# ============ CUSTOMER PROFILE ROUTES ============
-@app.patch("/api/customer/profile")
-async def update_customer_profile(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    
-    allowed_fields = ["name", "contactPerson", "phone", "address", "city", "state", "pincode", 
-                      "gst_number", "business_name", "businessName"]
-    
-    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    for field in allowed_fields:
-        if field in body:
-            update_data[field] = body[field]
-    
-    # Handle businessName alias
-    if "businessName" in body:
-        update_data["business_name"] = body["businessName"]
-    
-    db.customers.update_one({"id": customer_id}, {"$set": update_data})
-    
-    customer = db.customers.find_one({"id": customer_id}, {"_id": 0, "password": 0})
-    return {"success": True, "message": "Profile updated", "data": customer}
-
-@app.post("/api/customer/change-password")
-async def change_customer_password(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    customer_id = get_customer_id_from_token(payload)
-    current_password = body.get("current_password")
-    new_password = body.get("new_password")
-    
-    if not current_password or not new_password:
-        raise HTTPException(status_code=400, detail="Current and new password required")
-    
-    customer = db.customers.find_one({"id": customer_id, "password": hash_password(current_password)})
-    if not customer:
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    
-    db.customers.update_one({"id": customer_id}, {"$set": {"password": hash_password(new_password)}})
-    return {"success": True, "message": "Password changed successfully"}
-
-
-
-# ============ SALES PORTAL HELPER ============
-def get_sales_user_id_from_token(payload: dict) -> str:
-    """Extract sales user ID from JWT payload"""
-    user_id = payload.get("user_id", "")
-    role = payload.get("role", "")
-    if role not in ["Sales Person", "Manager", "Super Admin"]:
-        raise HTTPException(status_code=403, detail="Sales access required")
-    return user_id
-
-# ============ SALES DASHBOARD ============
-@app.get("/api/sales/dashboard")
-async def sales_dashboard(payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    
-    # Get sales person's assigned customers
-    assigned_customers = list(db.customers.find({"sales_person_id": user_id}, {"_id": 0}))
-    customer_ids = [c["id"] for c in assigned_customers]
-    
-    # Calculate metrics
-    orders = list(db.orders.find({"customer_id": {"$in": customer_ids}}, {"_id": 0}))
-    invoices = list(db.invoices.find({"customer_id": {"$in": customer_ids}}, {"_id": 0}))
-    
-    # Monthly sales (current month)
-    now = datetime.now(timezone.utc)
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    monthly_orders = [o for o in orders if o.get("order_date", "") >= month_start.isoformat()]
-    monthly_sales = sum(o.get("amount", 0) or o.get("grand_total", 0) for o in monthly_orders)
-    
-    # New orders this week
-    week_ago = (now - timedelta(days=7)).isoformat()
-    new_orders_week = len([o for o in orders if o.get("order_date", "") >= week_ago])
-    
-    # Pending orders
-    pending_orders = [o for o in orders if o.get("status") not in ["Completed", "Cancelled", "Delivered"]]
-    
-    # Outstanding balance
-    total_outstanding = sum(c.get("outstanding_balance", 0) for c in assigned_customers)
-    
-    # Due invoices
-    due_invoices = [i for i in invoices if i.get("status") in ["Pending", "Overdue", "Due"]]
-    
-    return {
-        "monthly_sales": monthly_sales,
-        "new_orders_week": new_orders_week,
-        "assigned_customers": len(assigned_customers),
-        "pending_orders_count": len(pending_orders),
-        "total_outstanding": total_outstanding,
-        "due_invoices_count": len(due_invoices)
-    }
-
-# ============ SALES CUSTOMERS ============
 @app.get("/api/sales/customers")
 async def get_sales_customers(
     page: int = 1,
     per_page: int = 10,
-    search: str = "",
-    status: str = "",
+    search: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    user_id = get_sales_user_id_from_token(payload)
-    skip = (page - 1) * per_page
-    
-    query: dict = {"sales_person_id": user_id}
-    if status:
-        if status.lower() == "approved":
-            query["approval_status"] = "Approved"
-        elif status.lower() == "pending":
-            query["approval_status"] = "Pending"
+    """Get all approved customers for sales to place orders"""
+    query = {"approval_status": "Approved", "is_active": True}
     
     if search:
         query["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},
-            {"email": {"$regex": search, "$options": "i"}},
+            {"contactPerson": {"$regex": search, "$options": "i"}},
             {"phone": {"$regex": search, "$options": "i"}}
         ]
     
     total = db.customers.count_documents(query)
-    customers = list(db.customers.find(query, {"_id": 0, "password": 0}).skip(skip).limit(per_page))
+    skip = (page - 1) * per_page
+    
+    customers = list(db.customers.find(query, {"_id": 0, "password": 0}).sort("name", 1).skip(skip).limit(per_page))
     
     return {
         "data": customers,
@@ -1388,313 +1686,24 @@ async def get_sales_customers(
         }
     }
 
-@app.get("/api/sales/customers/{customer_id}")
-async def get_sales_customer(customer_id: int, payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id}, {"_id": 0, "password": 0})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    return customer
-
-@app.post("/api/sales/customers")
-async def create_sales_customer(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
+@app.get("/api/sales/dashboard")
+async def get_sales_dashboard(payload: dict = Depends(verify_token)):
+    """Dashboard for sales person"""
+    user_id = payload.get("user_id")
     
-    # Check for duplicate email
-    if db.customers.find_one({"email": body.get("email")}):
-        raise HTTPException(status_code=400, detail="Customer with this email already exists")
+    # Count orders placed by this sales person
+    total_orders = db.orders_v2.count_documents({"placed_by_role": "Sales Person"})
+    pending_orders = db.orders_v2.count_documents({"placed_by_role": "Sales Person", "status": "Pending"})
     
-    # Get sales person name
-    sales_user = db.users.find_one({"_id": ObjectId(user_id)})
-    sales_person_name = sales_user.get("name", "Sales Person") if sales_user else "Sales Person"
-    
-    # Generate new customer ID
-    last_customer = db.customers.find_one(sort=[("id", -1)])
-    new_id = (last_customer["id"] + 1) if last_customer else 1
-    
-    customer = {
-        "id": new_id,
-        "email": body.get("email"),
-        "name": body.get("name") or body.get("business_name"),
-        "business_name": body.get("business_name") or body.get("name"),
-        "contactPerson": body.get("contactPerson") or body.get("contact_person"),
-        "phone": body.get("phone"),
-        "address": body.get("address", ""),
-        "city": body.get("city", ""),
-        "state": body.get("state", ""),
-        "pincode": body.get("pincode", ""),
-        "gst_number": body.get("gst_number") or body.get("gstin", ""),
-        "role": "Customer",
-        "approval_status": "Pending",
-        "is_active": True,
-        "pricing_type": int(body.get("pricing_type", 1)),
-        "outstanding_balance": 0,
-        "credit_limit": int(body.get("credit_limit", 25000)),
-        "sales_person_id": user_id,
-        "sales_person_name": sales_person_name,
-        "password": hash_password(body.get("password", "customer123")),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    db.customers.insert_one(customer)
-    del customer["password"]
-    customer.pop("_id", None)
-    
-    return {"success": True, "message": "Customer created successfully", "data": customer}
-
-# ============ SALES CART ============
-@app.get("/api/sales/cart")
-async def get_sales_cart(customer_id: Optional[int] = None, payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    
-    if not customer_id:
-        return {"items": [], "total": 0, "customer": None}
-    
-    # Verify customer belongs to this sales person
-    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id}, {"_id": 0, "password": 0})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found or not assigned to you")
-    
-    cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id}, {"_id": 0})
-    if not cart:
-        return {"items": [], "total": 0, "customer": customer, "pricing_type": customer.get("pricing_type", 1)}
-    
-    items = cart.get("items", [])
-    total = sum(item.get("price", 0) * item.get("quantity", 0) for item in items)
+    # Get recent orders
+    recent_orders = list(db.orders_v2.find({"placed_by_role": "Sales Person"}, {"_id": 0}).sort("created_at", -1).limit(5))
     
     return {
-        "items": items,
-        "total": total,
-        "customer": customer,
-        "pricing_type": customer.get("pricing_type", 1)
+        "total_orders": total_orders,
+        "pending_orders": pending_orders,
+        "recent_orders": recent_orders
     }
 
-@app.post("/api/sales/cart")
-async def add_to_sales_cart(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    customer_id = body.get("customer_id")
-    product_id = body.get("product_id")
-    quantity = int(body.get("quantity", 1))
-    
-    if not customer_id:
-        raise HTTPException(status_code=400, detail="Customer ID required")
-    
-    # Verify customer
-    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found or not assigned to you")
-    
-    # Get product
-    product = db.products.find_one({"id": product_id}, {"_id": 0})
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Get customer's tier price
-    pricing_type = str(customer.get("pricing_type", 1))
-    price = product.get("pricing_rates", {}).get(pricing_type, product.get("price", 0))
-    
-    # Get or create cart
-    cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id})
-    if not cart:
-        cart = {"sales_person_id": user_id, "customer_id": customer_id, "items": []}
-        db.sales_carts.insert_one(cart)
-    
-    items = cart.get("items", [])
-    
-    # Update or add item
-    found = False
-    for item in items:
-        if item["product_id"] == product_id:
-            item["quantity"] = quantity
-            item["price"] = float(price)
-            found = True
-            break
-    
-    if not found:
-        items.append({
-            "product_id": product_id,
-            "name": product.get("name"),
-            "quantity": quantity,
-            "price": float(price),
-            "unit": product.get("priceUnit", "ea")
-        })
-    
-    db.sales_carts.update_one(
-        {"sales_person_id": user_id, "customer_id": customer_id},
-        {"$set": {"items": items}},
-        upsert=True
-    )
-    
-    return {"success": True, "message": "Cart updated"}
-
-@app.delete("/api/sales/cart")
-async def delete_sales_cart(
-    product_id: Optional[str] = None,
-    customer_id: Optional[int] = None,
-    payload: dict = Depends(verify_token)
-):
-    user_id = get_sales_user_id_from_token(payload)
-    
-    if product_id and customer_id:
-        # Remove specific item
-        cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id})
-        if cart:
-            items = [item for item in cart.get("items", []) if item["product_id"] != product_id]
-            db.sales_carts.update_one(
-                {"sales_person_id": user_id, "customer_id": customer_id},
-                {"$set": {"items": items}}
-            )
-        return {"success": True, "message": "Item removed"}
-    elif customer_id:
-        # Clear cart for customer
-        db.sales_carts.delete_one({"sales_person_id": user_id, "customer_id": customer_id})
-        return {"success": True, "message": "Cart cleared"}
-    else:
-        return {"success": False, "message": "Customer ID required"}
-
-# ============ SALES CHECKOUT ============
-@app.post("/api/sales/checkout")
-async def sales_checkout(body: dict = Body(...), payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    customer_id = body.get("customer_id")
-    
-    if not customer_id:
-        raise HTTPException(status_code=400, detail="Customer ID required")
-    
-    # Get customer
-    customer = db.customers.find_one({"id": customer_id, "sales_person_id": user_id})
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found or not assigned to you")
-    
-    if customer.get("approval_status") != "Approved":
-        raise HTTPException(status_code=403, detail="Customer is not approved yet")
-    
-    # Get cart
-    cart = db.sales_carts.find_one({"sales_person_id": user_id, "customer_id": customer_id})
-    if not cart or not cart.get("items"):
-        raise HTTPException(status_code=400, detail="Cart is empty")
-    
-    items = cart.get("items", [])
-    total = sum(item["price"] * item["quantity"] for item in items)
-    
-    # Get sales person name
-    sales_user = db.users.find_one({"_id": ObjectId(user_id)})
-    sales_person_name = sales_user.get("name", "Sales Person") if sales_user else "Sales Person"
-    
-    # Create order
-    order_id = f"ORD-{secrets.token_hex(4).upper()}"
-    order = {
-        "id": order_id,
-        "customer_id": customer_id,
-        "customerName": customer.get("name"),
-        "status": "Created",
-        "amount": total,
-        "grand_total": total,
-        "order_date": datetime.now(timezone.utc).isoformat(),
-        "paymentStatus": "Credit",
-        "sales_person_id": user_id,
-        "salesPerson": sales_person_name,
-        "shipping_address": customer.get("address", ""),
-        "pricing_type": customer.get("pricing_type", 1),
-        "items": [
-            {
-                "product_id": item["product_id"],
-                "productName": item["name"],
-                "name": item["name"],
-                "quantity": item["quantity"],
-                "unitPrice": item["price"],
-                "price": item["price"],
-                "unit": item.get("unit", "ea")
-            }
-            for item in items
-        ],
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    
-    db.orders.insert_one(order)
-    
-    # Clear cart
-    db.sales_carts.delete_one({"sales_person_id": user_id, "customer_id": customer_id})
-    
-    return {"success": True, "order_id": order_id, "message": "Order placed successfully"}
-
-# ============ SALES ORDERS ============
-@app.get("/api/sales/orders")
-async def get_sales_orders(
-    page: int = 1,
-    per_page: int = 10,
-    status: str = "",
-    payload: dict = Depends(verify_token)
-):
-    user_id = get_sales_user_id_from_token(payload)
-    skip = (page - 1) * per_page
-    
-    query: dict = {"sales_person_id": user_id}
-    if status:
-        query["status"] = status
-    
-    total = db.orders.count_documents(query)
-    orders = list(db.orders.find(query, {"_id": 0}).sort("order_date", -1).skip(skip).limit(per_page))
-    
-    return {
-        "data": orders,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": (total + per_page - 1) // per_page
-        }
-    }
-
-@app.get("/api/sales/orders/{order_id}")
-async def get_sales_order(order_id: str, payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    order = db.orders.find_one({"id": order_id, "sales_person_id": user_id}, {"_id": 0})
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-    return order
-
-# ============ SALES INVOICES ============
-@app.get("/api/sales/invoices")
-async def get_sales_invoices(
-    page: int = 1,
-    per_page: int = 10,
-    status: str = "",
-    payload: dict = Depends(verify_token)
-):
-    user_id = get_sales_user_id_from_token(payload)
-    skip = (page - 1) * per_page
-    
-    # Get sales person's customer IDs
-    customers = list(db.customers.find({"sales_person_id": user_id}, {"id": 1}))
-    customer_ids = [c["id"] for c in customers]
-    
-    query: dict = {"customer_id": {"$in": customer_ids}}
-    if status:
-        query["status"] = status
-    
-    total = db.invoices.count_documents(query)
-    invoices = list(db.invoices.find(query, {"_id": 0}).sort("issue_date", -1).skip(skip).limit(per_page))
-    
-    return {
-        "data": invoices,
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": (total + per_page - 1) // per_page
-        }
-    }
-
-@app.get("/api/sales/invoices/{invoice_id}")
-async def get_sales_invoice(invoice_id: str, payload: dict = Depends(verify_token)):
-    user_id = get_sales_user_id_from_token(payload)
-    
-    # Get sales person's customer IDs
-    customers = list(db.customers.find({"sales_person_id": user_id}, {"id": 1}))
-    customer_ids = [c["id"] for c in customers]
-    
-    invoice = db.invoices.find_one({"id": invoice_id, "customer_id": {"$in": customer_ids}}, {"_id": 0})
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Invoice not found")
-    return invoice
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
