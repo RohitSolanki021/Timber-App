@@ -25,15 +25,22 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 - `products_v2`: {product_group, name, thickness, size, stock, pricing_tiers: {1-6}}
 - `orders_v2`: {items, status, photo_url, order_type (Plywood/Timber), transport_details}
 - `invoices_v2`: {order_id, items, amount, order_type}
+- `stock`: {stock_key, product_id, thickness, size, quantity, variant_prices}
 - `customers`: {pricing_tier (1-6), approval_status, business_name}
 
 ### Key API Endpoints
 - `POST /api/orders/direct` - Create split billing order
 - `GET /api/orders/v2` - List orders with filters
-- `POST /api/orders/v2/{id}/confirm` - Confirm order, create invoice
+- `PUT /api/orders/v2/{id}/items` - Admin edit item prices before approval
+- `POST /api/orders/v2/{id}/confirm` - Approve order, create invoice
 - `POST /api/orders/v2/{id}/cancel` - Cancel order
+- `PUT /api/orders/v2/{id}/status` - Update order status (Delivered)
 - `GET /api/invoices/v2` - List invoices with type filters
 - `GET /api/products-v2` - Cascading product variants
+- `POST /api/admin/products-v2` - Create product with variants
+- `GET /api/admin/products-v2/template` - Download Excel template
+- `POST /api/admin/products-v2/import` - Import products from Excel
+- `GET /api/admin/products-v2/export` - Export products to Excel
 - `GET /api/sales/customers` - Customers for sales portal
 - `POST /api/sales/customers` - Create customer (auto-approved)
 
@@ -48,30 +55,39 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 - [x] Dynamic banners on homepage
 - [x] Product catalog with search
 - [x] Photo order upload
-- [x] Transport details modal
+- [x] Transport details modal with **MANDATORY fields**
+- [x] **Quantity dropdown** with preset values (1,2,3,5,10,20,50,100) + custom option
+- [x] **Simplified order statuses**: Order Placed → Approved → Delivered / Cancelled
 
 #### Admin Panel
 - [x] Orders V2 page with Plywood/Timber type filters
-- [x] Confirm/Cancel buttons for pending orders
-- [x] Status filters (Pending, Confirmed, Dispatched, Completed, Cancelled)
-- [x] Order detail modal view
+- [x] **Edit button** to modify item prices/quantities before approval
+- [x] Approve/Cancel buttons for pending orders
+- [x] **Simplified status filters**: Order Placed, Approved, Delivered, Cancelled
+- [x] Order detail modal view with full breakdown
 - [x] 6-tier pricing in Customer create/edit forms
 - [x] Invoices V2 page with Plywood/Timber type filters
 - [x] Invoice detail page with embedded items
-- [x] Mark as Paid/Overdue quick actions
+- [x] **Products V2** with variant management (thickness × size × tier pricing)
+- [x] **Excel template download** for product import
+- [x] **Excel upload** for bulk product import
+- [x] **Excel export** of all products
 
 #### Sales Portal
 - [x] FastOrder flow with customer selection first
 - [x] Add Customer with 6-tier pricing (auto-approved)
-- [x] Updated navigation (removed old Cart)
-- [x] Dashboard with Create Order link
+- [x] Updated navigation (New Order highlighted)
+- [x] **Quantity dropdown** with preset values
+- [x] **Mandatory transport fields**
 
 #### Backend
 - [x] Split billing logic (Plywood/Timber separation)
 - [x] 6-tier pricing support
 - [x] Order confirmation creates invoice
 - [x] Stock validation per variant
-- [x] Sales customer creation endpoint
+- [x] **Order items price editing** endpoint
+- [x] **Excel import/export** with openpyxl + pandas
+- [x] **Simplified statuses**: Pending, Approved, Delivered, Cancelled
 
 ### Test Credentials
 - Super Admin: admin@naturalplylam.com / admin123
@@ -83,13 +99,14 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 
 ### P1 - Important
 - [ ] Admin Banner Management UI (backend done, needs Super Admin UI)
-- [ ] Transport details validation (mandatory when delivery selected)
+- [ ] Update delivered orders status from admin
 
 ### P2 - Future
 - [ ] PDF generation with reportlab for invoices
-- [ ] CSV import for customers/products
-- [ ] Order edit functionality (before confirmation)
+- [ ] CSV import for customers
+- [ ] Order edit functionality (before approval) from customer portal
 - [ ] Product stock bulk update UI
+- [ ] Analytics dashboard with filters
 
 ## Test Reports
-- Latest: `/app/test_reports/iteration_7.json` - 100% pass rate (21/21 backend, all frontend)
+- Latest: `/app/test_reports/iteration_8.json` - 100% pass rate (18/18 backend, all frontend verified)
