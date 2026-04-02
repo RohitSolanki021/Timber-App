@@ -35,8 +35,16 @@ export default function InvoiceDetail() {
         const inv = await apiProxy.getInvoice(id!);
         setInvoice(inv);
         setSelectedStatus(inv.status);
-        const ord = await apiProxy.getOrder(inv.order_id);
-        setOrder(ord);
+        // V2 invoices have items embedded, order is optional for reference
+        if (inv.order_id) {
+          try {
+            const ord = await apiProxy.getOrder(inv.order_id);
+            setOrder(ord);
+          } catch {
+            // Order may not exist, continue with invoice-only data
+            console.log('Order not found, using invoice items');
+          }
+        }
       } catch (err) {
         console.error(err);
         toast.error('Failed to load invoice');
@@ -107,7 +115,7 @@ export default function InvoiceDetail() {
     );
   }
 
-  if (!invoice || !order) {
+  if (!invoice) {
     return (
       <div className="p-8 text-center">
         <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -116,6 +124,9 @@ export default function InvoiceDetail() {
       </div>
     );
   }
+
+  // Use invoice items directly (V2 invoices have embedded items)
+  const displayItems = invoice.items || order?.items || [];
 
   const statusConfig = getStatusConfig(invoice.status);
   const StatusIcon = statusConfig.icon;
@@ -217,16 +228,18 @@ export default function InvoiceDetail() {
               <div>
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Items</p>
                 <div className="space-y-3">
-                  {order.items?.map((item, i) => (
+                  {displayItems.map((item: any, i: number) => (
                     <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
                       <div>
-                        <p className="font-medium text-slate-900">{item.productName || item.name || "Product"}</p>
+                        <p className="font-medium text-slate-900">{item.product_name || item.productName || item.name || "Product"}</p>
                         <p className="text-xs text-slate-500">
-                          {item.quantity} {item.unit}s × ₹{(item.unitPrice ?? item.price ?? 0).toLocaleString()}
+                          {item.thickness && `${item.thickness}mm `}
+                          {item.size && `× ${item.size} `}
+                          · {item.quantity} {item.unit || 'pcs'} × ₹{(item.unit_price ?? item.unitPrice ?? item.price ?? 0).toLocaleString()}
                         </p>
                       </div>
                       <p className="font-bold text-slate-900">
-                        ₹{((item.unitPrice ?? item.price ?? 0) * item.quantity).toLocaleString()}
+                        ₹{(item.total_price ?? ((item.unit_price ?? item.unitPrice ?? item.price ?? 0) * item.quantity)).toLocaleString()}
                       </p>
                     </div>
                   ))}

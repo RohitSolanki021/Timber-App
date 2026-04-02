@@ -5,7 +5,7 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
-import Orders from "./pages/Orders";
+import OrdersV2 from "./pages/OrdersV2";
 import OrderDetail from "./pages/OrderDetail";
 import Invoices from "./pages/Invoices";
 import Customers from "./pages/Customers";
@@ -89,7 +89,7 @@ export default function App() {
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/customer/:id" element={<CustomerDetail />} />
-            <Route path="/orders" element={<Orders />} />
+            <Route path="/orders" element={<OrdersV2 />} />
             <Route path="/order/:id" element={<OrderDetail />} />
             <Route path="/invoices" element={<Invoices />} />
             <Route path="/invoice/:id" element={<InvoiceDetail />} />

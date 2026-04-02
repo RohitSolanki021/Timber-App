@@ -2224,6 +2224,59 @@ async def get_sales_customers(
         }
     }
 
+@app.post("/api/sales/customers")
+async def create_sales_customer(customer: AdminCustomerCreate, payload: dict = Depends(verify_token)):
+    """Sales person creates a customer - auto approved"""
+    role = payload.get("role", "").lower()
+    if role not in ["sales person", "super admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to create customers")
+    
+    existing = db.customers.find_one({"email": customer.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    
+    existing_phone = db.customers.find_one({"phone": customer.phone})
+    if existing_phone:
+        raise HTTPException(status_code=400, detail="Phone number already exists")
+    
+    # Get sales person info
+    sales_person = db.users.find_one({"email": payload.get("user_id")})
+    
+    new_id = get_next_customer_id()
+    new_customer = {
+        "id": new_id,
+        "email": customer.email,
+        "name": customer.name,
+        "business_name": customer.name,
+        "contactPerson": customer.contactPerson,
+        "phone": customer.phone,
+        "role": "Customer",
+        "approval_status": "Approved",  # Auto approved
+        "is_active": True,
+        "pricing_tier": customer.pricing_tier,
+        "outstanding_balance": 0,
+        "credit_limit": customer.credit_limit or 25000,
+        "gst_number": customer.gst_number,
+        "address": customer.address,
+        "city": customer.city,
+        "state": customer.state,
+        "pincode": customer.pincode,
+        "notes": customer.notes,
+        "sales_person_id": str(sales_person.get("_id", "")) if sales_person else None,
+        "sales_person_name": sales_person.get("name") if sales_person else None,
+        "password": hash_password("customer123"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.customers.insert_one(new_customer)
+    
+    # Return without sensitive data
+    del new_customer["_id"]
+    del new_customer["password"]
+    
+    return {"success": True, "message": "Customer created successfully", "customer": new_customer}
+
 @app.get("/api/sales/dashboard")
 async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     """Dashboard for sales person"""

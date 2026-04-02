@@ -78,6 +78,7 @@ export interface Invoice {
   order_id: string;
   customer_id: number;
   customerName?: string;
+  order_type?: 'Plywood' | 'Timber';
   issue_date: string;
   due_date: string;
   sub_total: number;
@@ -86,6 +87,17 @@ export interface Invoice {
   grand_total: number;
   status: string;
   pricing_type?: number;
+  pricing_tier?: number;
+  items?: Array<{
+    product_id: string;
+    product_name: string;
+    product_group: string;
+    thickness: string;
+    size: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
 }
 
 export interface Pagination {

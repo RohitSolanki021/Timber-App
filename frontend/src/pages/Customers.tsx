@@ -345,7 +345,7 @@ export default function Customers() {
       sortable: true,
       render: (customer) => (
         <span className="px-2.5 py-1 bg-primary/10 text-primary rounded-lg text-sm font-medium">
-          Tier {customer.pricing_type || 1}
+          Tier {customer.pricing_tier || customer.pricing_type || 1}
         </span>
       ),
     },
@@ -764,8 +764,11 @@ export default function Customers() {
                   data-testid="input-pricing"
                 >
                   <option value={1}>Tier 1 (Standard)</option>
-                  <option value={2}>Tier 2 (Wholesale)</option>
-                  <option value={3}>Tier 3 (Premium)</option>
+                  <option value={2}>Tier 2 (Dealer)</option>
+                  <option value={3}>Tier 3 (Wholesale)</option>
+                  <option value={4}>Tier 4 (Premium)</option>
+                  <option value={5}>Tier 5 (VIP)</option>
+                  <option value={6}>Tier 6 (Enterprise)</option>
                 </select>
               </div>
               <div>

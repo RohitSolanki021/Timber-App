@@ -185,7 +185,7 @@ export const apiService = {
     });
   },
 
-  // Orders
+  // Orders V2
   async createOrder(items: Array<{ product_id: string; quantity: number }>) {
     return request(`${API_BASE}/orders`, {
       method: 'POST',
@@ -204,31 +204,44 @@ export const apiService = {
   },
 
   async getOrders(params: Record<string, any> = {}): Promise<PaginatedList<Order>> {
-    const query = new URLSearchParams({ resource: "orders", ...params }).toString();
-    const res = await request(`${API_BASE}/admin?${query}`);
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    const res = await request(`${API_BASE}/orders/v2${query ? '?' + query : ''}`);
     return normalizeListResponse<Order>(res);
   },
 
   async getOrder(id: string): Promise<Order> {
-    return request(`${API_BASE}/orders?id=${id}`);
+    const res = await request(`${API_BASE}/orders/v2/${id}`);
+    return res?.order || res?.data || res;
   },
 
-  // Invoices
+  async confirmOrder(orderId: string): Promise<{ success: boolean; message: string; invoice_id?: string }> {
+    return request(`${API_BASE}/orders/v2/${orderId}/confirm`, {
+      method: 'POST'
+    });
+  },
+
+  async cancelOrder(orderId: string): Promise<{ success: boolean; message: string }> {
+    return request(`${API_BASE}/orders/v2/${orderId}/cancel`, {
+      method: 'POST'
+    });
+  },
+
+  // Invoices V2
   async getInvoices(params: Record<string, any> = {}): Promise<PaginatedList<Invoice>> {
-    const query = new URLSearchParams({ resource: "invoices", ...params }).toString();
-    const res = await request(`${API_BASE}/admin?${query}`);
+    const query = new URLSearchParams(params as Record<string, string>).toString();
+    const res = await request(`${API_BASE}/invoices/v2${query ? '?' + query : ''}`);
     return normalizeListResponse<Invoice>(res);
   },
 
   async getInvoice(id: string): Promise<Invoice> {
-    const res = await request(`${API_BASE}/invoices?id=${id}`);
-    return res?.data || res;
+    const res = await request(`${API_BASE}/invoices/v2/${id}`);
+    return res?.invoice || res?.data || res;
   },
 
   async updateInvoice(invoiceId: string, data: { status?: string; due_date?: string; notes?: string }): Promise<{ success: boolean; message: string; data: Invoice }> {
-    return request(`${API_BASE}/invoices/${invoiceId}`, {
+    return request(`${API_BASE}/invoices/v2/${invoiceId}/status`, {
       method: 'PUT',
-      body: JSON.stringify(data)
+      body: JSON.stringify({ status: data.status })
     });
   },
 

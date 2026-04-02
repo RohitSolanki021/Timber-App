@@ -485,7 +485,7 @@ export default function Products() {
             {/* Manual Tier Pricing */}
             <div className="p-4 bg-slate-50 rounded-xl space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-slate-700">Customer Tier Pricing</h4>
+                <h4 className="text-sm font-medium text-slate-700">Customer Tier Pricing (6 Tiers)</h4>
                 <button
                   type="button"
                   onClick={() => {
@@ -496,6 +496,9 @@ export default function Products() {
                         "1": basePrice,
                         "2": Math.round(basePrice * 0.95 * 100) / 100,
                         "3": Math.round(basePrice * 0.90 * 100) / 100,
+                        "4": Math.round(basePrice * 0.85 * 100) / 100,
+                        "5": Math.round(basePrice * 0.80 * 100) / 100,
+                        "6": Math.round(basePrice * 0.75 * 100) / 100,
                       }
                     });
                   }}
@@ -506,72 +509,34 @@ export default function Products() {
                 </button>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Tier 1 (Standard)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                    <input
-                      type="number"
-                      value={formData.pricing_rates?.["1"] || 0}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        pricing_rates: {
-                          ...formData.pricing_rates,
-                          "1": parseFloat(e.target.value) || 0,
-                        }
-                      })}
-                      className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                      min="0"
-                      step="0.01"
-                      data-testid="input-tier1-price"
-                    />
+                {[1, 2, 3, 4, 5, 6].map((tier) => (
+                  <div key={tier}>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      Tier {tier} {tier === 1 ? '(Standard)' : tier === 2 ? '(Dealer)' : tier === 3 ? '(Wholesale)' : tier === 4 ? '(Premium)' : tier === 5 ? '(VIP)' : '(Enterprise)'}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
+                      <input
+                        type="number"
+                        value={formData.pricing_rates?.[String(tier)] || 0}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          pricing_rates: {
+                            ...formData.pricing_rates,
+                            [String(tier)]: parseFloat(e.target.value) || 0,
+                          }
+                        })}
+                        className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                        min="0"
+                        step="0.01"
+                        data-testid={`input-tier${tier}-price`}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Tier 2 (Wholesale)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                    <input
-                      type="number"
-                      value={formData.pricing_rates?.["2"] || 0}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        pricing_rates: {
-                          ...formData.pricing_rates,
-                          "2": parseFloat(e.target.value) || 0,
-                        }
-                      })}
-                      className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                      min="0"
-                      step="0.01"
-                      data-testid="input-tier2-price"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Tier 3 (Premium)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₹</span>
-                    <input
-                      type="number"
-                      value={formData.pricing_rates?.["3"] || 0}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        pricing_rates: {
-                          ...formData.pricing_rates,
-                          "3": parseFloat(e.target.value) || 0,
-                        }
-                      })}
-                      className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                      min="0"
-                      step="0.01"
-                      data-testid="input-tier3-price"
-                    />
-                  </div>
-                </div>
+                ))}
               </div>
               <p className="text-xs text-slate-500">
-                Set custom prices for each customer tier. Use "Auto-calculate" to set Tier 2 at 5% off and Tier 3 at 10% off.
+                Set custom prices for each customer tier. Use "Auto-calculate" to set graduated discounts (5% per tier).
               </p>
             </div>
           </div>

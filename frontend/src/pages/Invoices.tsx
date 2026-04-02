@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Invoice, Pagination } from "../types";
-import { FileText, ChevronRight, ChevronLeft, Search, Calendar, CheckCircle2, Clock } from "lucide-react";
+import { FileText, ChevronRight, ChevronLeft, Search, Calendar, CheckCircle2, Clock, Package, TreePine } from "lucide-react";
 import { apiProxy } from "../apiProxy";
 
 const INVOICES_PER_PAGE = 10;
@@ -13,12 +13,20 @@ export default function Invoices() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   useEffect(() => {
     const fetchInvoices = async () => {
       setLoading(true);
       try {
-        const response = await apiProxy.getInvoices({ page, per_page: INVOICES_PER_PAGE });
+        const params: Record<string, string> = { 
+          page: String(page), 
+          per_page: String(INVOICES_PER_PAGE) 
+        };
+        if (typeFilter !== 'all') params.order_type = typeFilter;
+        if (statusFilter !== 'All') params.status = statusFilter;
+        
+        const response = await apiProxy.getInvoices(params);
         setInvoices(response.data);
         setPagination(response.pagination);
       } catch (err) {
@@ -28,7 +36,7 @@ export default function Invoices() {
       }
     };
     fetchInvoices();
-  }, [page]);
+  }, [page, typeFilter, statusFilter]);
 
   const currentPage = pagination?.page ?? page;
   const totalPages = Math.max(1, pagination?.total_pages ?? page);
@@ -44,13 +52,18 @@ export default function Invoices() {
       )
     : invoices;
 
-  if (statusFilter !== "All") {
-    visibleInvoices = visibleInvoices.filter(
-      (invoice) => invoice.status.toLowerCase() === statusFilter.toLowerCase()
-    );
-  }
-
   const statuses = ["All", "Paid", "Pending"];
+  const orderTypes = [
+    { value: 'all', label: 'All Types', icon: FileText },
+    { value: 'Plywood', label: 'Plywood', icon: Package },
+    { value: 'Timber', label: 'Timber', icon: TreePine }
+  ];
+
+  const getTypeBadge = (type: string | undefined) => {
+    if (type === 'Plywood') return 'bg-orange-100 text-orange-700';
+    if (type === 'Timber') return 'bg-emerald-100 text-emerald-700';
+    return 'bg-slate-100 text-slate-700';
+  };
 
   return (
     <div className="p-6 lg:p-8" data-testid="invoices-page">
@@ -71,7 +84,7 @@ export default function Invoices() {
 
       {/* Search and Filters */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6 space-y-4" data-testid="invoices-filters">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -83,13 +96,32 @@ export default function Invoices() {
               data-testid="search-input"
             />
           </div>
+          
+          {/* Type Filter */}
+          <div className="flex gap-2">
+            {orderTypes.map((type) => (
+              <button
+                key={type.value}
+                onClick={() => { setTypeFilter(type.value); setPage(1); }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  typeFilter === type.value
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+                data-testid={`filter-type-${type.value}`}
+              >
+                <type.icon className="w-4 h-4" />
+                {type.label}
+              </button>
+            ))}
+          </div>
         </div>
         
         <div className="flex flex-wrap gap-2" data-testid="status-filters">
           {statuses.map((status) => (
             <button
               key={status}
-              onClick={() => setStatusFilter(status)}
+              onClick={() => { setStatusFilter(status); setPage(1); }}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                 statusFilter === status
                   ? "bg-primary text-white shadow-md shadow-primary/20"
@@ -123,9 +155,8 @@ export default function Invoices() {
                 <tr>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Invoice ID</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Order ID</th>
+                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Issue Date</th>
-                  <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Due Date</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
                   <th className="text-left px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="text-right px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
@@ -138,43 +169,36 @@ export default function Invoices() {
                     className="hover:bg-slate-50 transition-colors cursor-pointer" 
                     data-testid={`invoice-row-${invoice.id}`}
                     onClick={() => window.location.href = `/invoice/${invoice.id}`}
-                  >                    <td className="px-6 py-4">
+                  >
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          invoice.status === 'Paid' ? 'bg-emerald-50' : 'bg-amber-50'
+                          invoice.order_type === 'Plywood' ? 'bg-orange-50' : invoice.order_type === 'Timber' ? 'bg-emerald-50' : 'bg-slate-50'
                         }`}>
-                          <FileText className={`w-5 h-5 ${
-                            invoice.status === 'Paid' ? 'text-emerald-600' : 'text-amber-600'
-                          }`} />
+                          {invoice.order_type === 'Plywood' ? (
+                            <Package className="w-5 h-5 text-orange-600" />
+                          ) : invoice.order_type === 'Timber' ? (
+                            <TreePine className="w-5 h-5 text-emerald-600" />
+                          ) : (
+                            <FileText className="w-5 h-5 text-slate-500" />
+                          )}
                         </div>
                         <span className="font-medium text-slate-900">{invoice.id}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <p className="font-medium text-slate-900">{invoice.customerName || "Customer"}</p>
+                      <p className="text-xs text-slate-500">{invoice.order_id}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <Link 
-                        to={`/order/${invoice.order_id}`}
-                        className="text-primary hover:underline font-medium"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {invoice.order_id}
-                      </Link>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getTypeBadge(invoice.order_type)}`}>
+                        {invoice.order_type || 'N/A'}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-sm text-slate-600">
                         <Calendar className="w-4 h-4 text-slate-400" />
                         {new Date(invoice.issue_date).toLocaleDateString('en-IN', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-slate-600">
-                        {new Date(invoice.due_date).toLocaleDateString('en-IN', { 
                           month: 'short', 
                           day: 'numeric',
                           year: 'numeric'
@@ -207,7 +231,7 @@ export default function Invoices() {
                         data-testid={`view-invoice-${invoice.id}`}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        View Details
+                        View
                         <ChevronRight className="w-4 h-4" />
                       </Link>
                     </td>
