@@ -181,6 +181,31 @@ class DirectOrderCreate(BaseModel):
     items: List[OrderItemCreate]
     photo_reference: Optional[str] = None  # Base64 encoded image
     notes: Optional[str] = None
+    # Transport details
+    transport_mode: Optional[str] = None  # "Self Pickup" or "Delivery"
+    vehicle_number: Optional[str] = None
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+
+class OrderPriceUpdate(BaseModel):
+    """Admin can update order prices before approval"""
+    items: List[dict]  # Updated items with new prices
+    notes: Optional[str] = None
+
+class AdminCustomerCreate(BaseModel):
+    """Admin/Super Admin creates a customer - auto approved"""
+    name: str
+    contactPerson: str
+    email: str
+    phone: str
+    pricing_tier: int = Field(default=1, ge=1, le=6)
+    gst_number: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    credit_limit: Optional[float] = 50000
+    notes: Optional[str] = None
 
 # Initialize demo data with new product catalog
 def init_demo_data():
@@ -785,6 +810,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
     
     # Create orders
     orders_created = []
+    invoices_created = []
     current_time = datetime.now(timezone.utc).isoformat()
     
     # Get placer info
@@ -798,6 +824,38 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         user = db.users.find_one({"email": user_id})
         if user:
             placer_name = user.get("name")
+    
+    # Transport details
+    transport_info = {
+        "transport_mode": order.transport_mode,
+        "vehicle_number": order.vehicle_number,
+        "driver_name": order.driver_name,
+        "driver_phone": order.driver_phone
+    }
+    
+    # Helper function to create invoice for an order
+    def create_invoice_for_order(order_data: dict) -> dict:
+        invoice_id = f"INV-{secrets.token_hex(4).upper()}"
+        invoice = {
+            "id": invoice_id,
+            "order_id": order_data["id"],
+            "customer_id": order_data["customer_id"],
+            "customerName": order_data["customerName"],
+            "order_type": order_data["order_type"],
+            "items": order_data["items"],
+            "sub_total": order_data["sub_total"],
+            "cgst": order_data["cgst"],
+            "sgst": order_data["sgst"],
+            "grand_total": order_data["grand_total"],
+            "pricing_tier": order_data["pricing_tier"],
+            "status": "Pending",
+            "issue_date": current_time,
+            "due_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+            "created_at": current_time,
+            "updated_at": current_time
+        }
+        db.invoices_v2.insert_one(invoice)
+        return {"id": invoice_id, "type": order_data["order_type"], "total": order_data["grand_total"]}
     
     # Create Plywood order if items exist
     if plywood_items:
@@ -821,6 +879,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
             "notes": order.notes,
             "placed_by": placer_name,
             "placed_by_role": placer_role,
+            "transport": transport_info,
             "order_date": current_time,
             "created_at": current_time,
             "updated_at": current_time,
@@ -828,6 +887,10 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         }
         db.orders_v2.insert_one(plywood_order)
         orders_created.append({"id": plywood_order["id"], "type": "Plywood", "total": plywood_order["grand_total"]})
+        
+        # Create invoice for plywood order
+        inv = create_invoice_for_order(plywood_order)
+        invoices_created.append(inv)
     
     # Create Timber order if items exist
     if timber_items:
@@ -851,6 +914,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
             "notes": order.notes,
             "placed_by": placer_name,
             "placed_by_role": placer_role,
+            "transport": transport_info,
             "order_date": current_time,
             "created_at": current_time,
             "updated_at": current_time,
@@ -858,13 +922,18 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         }
         db.orders_v2.insert_one(timber_order)
         orders_created.append({"id": timber_order["id"], "type": "Timber", "total": timber_order["grand_total"]})
+        
+        # Create invoice for timber order
+        inv = create_invoice_for_order(timber_order)
+        invoices_created.append(inv)
     
     total_amount = sum(o["total"] for o in orders_created)
     
     return {
         "success": True,
-        "message": f"Order placed successfully. {len(orders_created)} bill(s) created.",
+        "message": f"Order placed successfully. {len(orders_created)} order(s) and {len(invoices_created)} invoice(s) created.",
         "orders": orders_created,
+        "invoices": invoices_created,
         "total_amount": total_amount
     }
 
@@ -876,9 +945,10 @@ async def get_orders_v2(
     status: Optional[str] = None,
     customer_id: Optional[int] = None,
     search: Optional[str] = None,
+    pending_first: bool = True,
     payload: dict = Depends(verify_token)
 ):
-    """Get orders with filters"""
+    """Get orders with filters - pending orders shown first"""
     query = {}
     
     user_id = payload.get("user_id")
@@ -894,7 +964,7 @@ async def get_orders_v2(
     if order_type and order_type != "all":
         query["order_type"] = order_type
     
-    if status and status != "all":
+    if status and status != "all" and status != "All":
         query["status"] = status
     
     if search:
@@ -906,7 +976,21 @@ async def get_orders_v2(
     total = db.orders_v2.count_documents(query)
     skip = (page - 1) * per_page
     
-    orders = list(db.orders_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    # Sort: Pending first, then by created_at desc
+    if pending_first and not status:
+        pipeline = [
+            {"$match": query},
+            {"$addFields": {
+                "sort_priority": {"$cond": [{"$eq": ["$status", "Pending"]}, 0, 1]}
+            }},
+            {"$sort": {"sort_priority": 1, "created_at": -1}},
+            {"$skip": skip},
+            {"$limit": per_page},
+            {"$project": {"_id": 0, "sort_priority": 0}}
+        ]
+        orders = list(db.orders_v2.aggregate(pipeline))
+    else:
+        orders = list(db.orders_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
     
     return {
         "data": orders,
@@ -983,6 +1067,61 @@ async def update_order_v2(order_id: str, items: List[OrderItemCreate], payload: 
     
     return {"success": True, "message": "Order updated successfully"}
 
+class AdminOrderItemsUpdate(BaseModel):
+    items: List[dict]
+    notes: Optional[str] = None
+
+@app.put("/api/admin/orders/{order_id}/items")
+async def admin_update_order_items(order_id: str, body: AdminOrderItemsUpdate, payload: dict = Depends(verify_token)):
+    """Admin can update order items and prices before approval"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Only admin can update order prices")
+    
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get("status") != "Pending":
+        raise HTTPException(status_code=400, detail="Can only update pending orders")
+    
+    items = body.items
+    # Update items with admin-provided prices
+    total = sum(item.get("total_price", item.get("unit_price", 0) * item.get("quantity", 1)) for item in items)
+    total_qty = sum(item.get("quantity", 1) for item in items)
+    
+    update_data = {
+        "items": items,
+        "total_quantity": total_qty,
+        "sub_total": total,
+        "cgst": round(total * 0.09, 2),
+        "sgst": round(total * 0.09, 2),
+        "grand_total": round(total * 1.18, 2),
+        "price_modified_by": payload.get("user_id"),
+        "price_modified_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if body.notes:
+        update_data["admin_notes"] = body.notes
+    
+    db.orders_v2.update_one({"id": order_id}, {"$set": update_data})
+    
+    # Also update the corresponding invoice
+    db.invoices_v2.update_one(
+        {"order_id": order_id},
+        {"$set": {
+            "items": items,
+            "sub_total": total,
+            "cgst": round(total * 0.09, 2),
+            "sgst": round(total * 0.09, 2),
+            "grand_total": round(total * 1.18, 2),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Order prices updated", "new_total": round(total * 1.18, 2)}
+
 @app.post("/api/orders/v2/{order_id}/confirm")
 async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token)):
     """Admin confirms an order - locks it and deducts stock"""
@@ -1017,27 +1156,35 @@ async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token))
         }}
     )
     
-    # Create invoice
-    invoice = {
-        "id": generate_invoice_id(),
-        "order_id": order_id,
-        "customer_id": order["customer_id"],
-        "customerName": order.get("customerName"),
-        "order_type": order.get("order_type"),
-        "items": order.get("items", []),
-        "sub_total": order.get("sub_total", 0),
-        "cgst": order.get("cgst", 0),
-        "sgst": order.get("sgst", 0),
-        "grand_total": order.get("grand_total", 0),
-        "pricing_tier": order.get("pricing_tier"),
-        "status": "Pending",
-        "issue_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        "due_date": (datetime.now(timezone.utc) + timedelta(days=15)).strftime("%Y-%m-%d"),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    db.invoices_v2.insert_one(invoice)
+    # Update invoice status (invoice created when order placed)
+    db.invoices_v2.update_one(
+        {"order_id": order_id},
+        {"$set": {
+            "status": "Confirmed",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
     
-    return {"success": True, "message": "Order confirmed and invoice generated", "invoice_id": invoice["id"]}
+    invoice = db.invoices_v2.find_one({"order_id": order_id}, {"_id": 0})
+    invoice_id = invoice.get("id") if invoice else None
+    
+    return {"success": True, "message": "Order confirmed", "invoice_id": invoice_id}
+
+@app.put("/api/orders/v2/{order_id}/price")
+async def update_order_price(order_id: str, payload: dict = Depends(verify_token)):
+    """Admin updates order prices before approval (from request body)"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Only admin can update prices")
+    
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get("status") != "Pending":
+        raise HTTPException(status_code=400, detail="Can only update prices for pending orders")
+    
+    return {"success": True, "message": "Use PUT /api/orders/v2/{order_id}/items to update items with new prices"}
 
 @app.post("/api/orders/v2/{order_id}/cancel")
 async def cancel_order_v2(order_id: str, payload: dict = Depends(verify_token)):
@@ -1284,10 +1431,24 @@ async def get_admin_dashboard_v2(payload: dict = Depends(verify_token)):
     pending_invoices = db.invoices_v2.count_documents({"status": "Pending"})
     
     total_customers = db.customers.count_documents({"approval_status": "Approved"})
+    pending_customers = db.customers.count_documents({"approval_status": "Pending"})
     
-    # Latest orders
-    latest_plywood = list(db.orders_v2.find({"order_type": "Plywood"}, {"_id": 0}).sort("created_at", -1).limit(5))
-    latest_timber = list(db.orders_v2.find({"order_type": "Timber"}, {"_id": 0}).sort("created_at", -1).limit(5))
+    # Latest orders - pending first
+    latest_plywood = list(db.orders_v2.aggregate([
+        {"$match": {"order_type": "Plywood"}},
+        {"$addFields": {"sort_priority": {"$cond": [{"$eq": ["$status", "Pending"]}, 0, 1]}}},
+        {"$sort": {"sort_priority": 1, "created_at": -1}},
+        {"$limit": 10},
+        {"$project": {"_id": 0, "sort_priority": 0}}
+    ]))
+    
+    latest_timber = list(db.orders_v2.aggregate([
+        {"$match": {"order_type": "Timber"}},
+        {"$addFields": {"sort_priority": {"$cond": [{"$eq": ["$status", "Pending"]}, 0, 1]}}},
+        {"$sort": {"sort_priority": 1, "created_at": -1}},
+        {"$limit": 10},
+        {"$project": {"_id": 0, "sort_priority": 0}}
+    ]))
     
     return {
         "pending_orders": pending_orders,
@@ -1296,8 +1457,95 @@ async def get_admin_dashboard_v2(payload: dict = Depends(verify_token)):
         "timber_orders_count": timber_orders,
         "pending_invoices": pending_invoices,
         "total_customers": total_customers,
+        "pending_customers": pending_customers,
         "latest_plywood_orders": latest_plywood,
         "latest_timber_orders": latest_timber
+    }
+
+@app.get("/api/admin/analytics/products")
+async def get_product_analytics(
+    customer_id: Optional[int] = None,
+    product_id: Optional[str] = None,
+    order_type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Analytics: Product sales by customer, quantity, etc."""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    match_stage = {}
+    if customer_id:
+        match_stage["customer_id"] = customer_id
+    if order_type:
+        match_stage["order_type"] = order_type
+    if start_date:
+        match_stage["created_at"] = {"$gte": start_date}
+    if end_date:
+        if "created_at" in match_stage:
+            match_stage["created_at"]["$lte"] = end_date
+        else:
+            match_stage["created_at"] = {"$lte": end_date}
+    
+    # Aggregate sales by product
+    pipeline = [
+        {"$match": match_stage} if match_stage else {"$match": {}},
+        {"$unwind": "$items"},
+        {"$group": {
+            "_id": {
+                "product_id": "$items.product_id",
+                "product_name": "$items.product_name",
+                "product_group": "$items.product_group"
+            },
+            "total_quantity": {"$sum": "$items.quantity"},
+            "total_amount": {"$sum": "$items.total_price"},
+            "order_count": {"$sum": 1}
+        }},
+        {"$sort": {"total_quantity": -1}},
+        {"$project": {
+            "_id": 0,
+            "product_id": "$_id.product_id",
+            "product_name": "$_id.product_name",
+            "product_group": "$_id.product_group",
+            "total_quantity": 1,
+            "total_amount": 1,
+            "order_count": 1
+        }}
+    ]
+    
+    if product_id:
+        pipeline[0] = {"$match": {**match_stage, "items.product_id": product_id}}
+    
+    product_stats = list(db.orders_v2.aggregate(pipeline))
+    
+    # Sales by customer
+    customer_pipeline = [
+        {"$match": match_stage} if match_stage else {"$match": {}},
+        {"$group": {
+            "_id": {"customer_id": "$customer_id", "customerName": "$customerName"},
+            "total_orders": {"$sum": 1},
+            "total_quantity": {"$sum": "$total_quantity"},
+            "total_amount": {"$sum": "$grand_total"}
+        }},
+        {"$sort": {"total_amount": -1}},
+        {"$limit": 20},
+        {"$project": {
+            "_id": 0,
+            "customer_id": "$_id.customer_id",
+            "customer_name": "$_id.customerName",
+            "total_orders": 1,
+            "total_quantity": 1,
+            "total_amount": 1
+        }}
+    ]
+    
+    customer_stats = list(db.orders_v2.aggregate(customer_pipeline))
+    
+    return {
+        "product_sales": product_stats,
+        "customer_sales": customer_stats
     }
 
 # ============ KEEP EXISTING ROUTES FOR BACKWARD COMPATIBILITY ============
@@ -1311,6 +1559,7 @@ async def get_customers(
     status: Optional[str] = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
+    pending_first: bool = True,
     payload: dict = Depends(verify_token)
 ):
     query = {}
@@ -1336,11 +1585,26 @@ async def get_customers(
         elif status == "archived":
             query["approval_status"] = "Archived"
     
-    sort_direction = DESCENDING if sort_order == "desc" else ASCENDING
     total = db.customers.count_documents(query)
     skip = (page - 1) * per_page
     
-    customers = list(db.customers.find(query, {"_id": 0, "password": 0}).sort(sort_by, sort_direction).skip(skip).limit(per_page))
+    # Sort: Pending first, then by sort_by
+    if pending_first and not status:
+        # Use aggregation to sort pending first
+        pipeline = [
+            {"$match": query},
+            {"$addFields": {
+                "sort_priority": {"$cond": [{"$eq": ["$approval_status", "Pending"]}, 0, 1]}
+            }},
+            {"$sort": {"sort_priority": 1, sort_by: -1 if sort_order == "desc" else 1}},
+            {"$skip": skip},
+            {"$limit": per_page},
+            {"$project": {"_id": 0, "password": 0, "mpin": 0, "sort_priority": 0}}
+        ]
+        customers = list(db.customers.aggregate(pipeline))
+    else:
+        sort_direction = DESCENDING if sort_order == "desc" else ASCENDING
+        customers = list(db.customers.find(query, {"_id": 0, "password": 0, "mpin": 0}).sort(sort_by, sort_direction).skip(skip).limit(per_page))
     
     return {
         "data": customers,
@@ -1632,6 +1896,10 @@ async def update_invoice(invoice_id: str, status: str = Body(..., embed=True), p
 @app.get("/api/admin")
 async def admin_resource(
     resource: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 20,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
     role = payload.get("role", "").lower()
@@ -1654,6 +1922,107 @@ async def admin_resource(
             "pending_customers": pending_customers,
             "total_customers": total_customers,
             "active_customers": active_customers
+        }
+    
+    if resource == "orders":
+        # Return orders from orders_v2 collection (new order system)
+        query = {}
+        if status and status != "all" and status != "All":
+            query["status"] = status
+        if search:
+            query["$or"] = [
+                {"id": {"$regex": search, "$options": "i"}},
+                {"customerName": {"$regex": search, "$options": "i"}}
+            ]
+        
+        total = db.orders_v2.count_documents(query)
+        skip = (page - 1) * per_page
+        
+        # Sort pending first, then by created_at desc
+        pipeline = [
+            {"$match": query},
+            {"$addFields": {"sort_priority": {"$cond": [{"$eq": ["$status", "Pending"]}, 0, 1]}}},
+            {"$sort": {"sort_priority": 1, "created_at": -1}},
+            {"$skip": skip},
+            {"$limit": per_page},
+            {"$project": {"_id": 0, "sort_priority": 0}}
+        ]
+        orders = list(db.orders_v2.aggregate(pipeline))
+        
+        return {
+            "data": orders,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": (total + per_page - 1) // per_page
+            }
+        }
+    
+    if resource == "customers":
+        query = {}
+        if status and status != "all":
+            if status == "active":
+                query["approval_status"] = "Approved"
+                query["is_active"] = True
+            elif status == "inactive":
+                query["approval_status"] = "Approved"
+                query["is_active"] = False
+            elif status == "pending":
+                query["approval_status"] = "Pending"
+            elif status == "archived":
+                query["approval_status"] = "Archived"
+        
+        if search:
+            query["$or"] = [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"email": {"$regex": search, "$options": "i"}},
+                {"phone": {"$regex": search, "$options": "i"}},
+                {"contactPerson": {"$regex": search, "$options": "i"}}
+            ]
+        
+        total = db.customers.count_documents(query)
+        skip = (page - 1) * per_page
+        
+        # Sort pending first
+        pipeline = [
+            {"$match": query},
+            {"$addFields": {"sort_priority": {"$cond": [{"$eq": ["$approval_status", "Pending"]}, 0, 1]}}},
+            {"$sort": {"sort_priority": 1, "created_at": -1}},
+            {"$skip": skip},
+            {"$limit": per_page},
+            {"$project": {"_id": 0, "password": 0, "mpin": 0, "sort_priority": 0}}
+        ]
+        customers = list(db.customers.aggregate(pipeline))
+        
+        return {
+            "data": customers,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": (total + per_page - 1) // per_page
+            }
+        }
+    
+    if resource == "invoices":
+        query = {}
+        if status and status != "all":
+            query["status"] = status
+        
+        total = db.invoices_v2.count_documents(query)
+        skip = (page - 1) * per_page
+        
+        invoices = list(db.invoices_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+        
+        return {
+            "data": invoices,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": (total + per_page - 1) // per_page
+            }
         }
     
     raise HTTPException(status_code=400, detail="Invalid resource")
