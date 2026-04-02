@@ -333,10 +333,22 @@ export const apiService = {
   },
 
   async updateOrderStatus(order_id: string, status: string) {
-    return request(`${API_BASE}/admin?action=update_order_status`, {
-      method: 'POST',
-      body: JSON.stringify({ order_id, status })
-    });
+    // Use V2 endpoints for order status updates
+    if (status === 'Confirmed') {
+      return request(`${API_BASE}/orders/v2/${order_id}/confirm`, {
+        method: 'POST'
+      });
+    } else if (status === 'Cancelled') {
+      return request(`${API_BASE}/orders/v2/${order_id}/cancel`, {
+        method: 'POST'
+      });
+    } else {
+      // For other status updates (Dispatched, Completed)
+      return request(`${API_BASE}/orders/v2/${order_id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status })
+      });
+    }
   },
 
   async getAdminDashboard() {

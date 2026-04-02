@@ -1010,6 +1010,70 @@ async def get_order_v2(order_id: str, payload: dict = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Order not found")
     return {"order": order}
 
+# Customer-specific order endpoints
+@app.get("/api/customer/orders")
+async def get_customer_orders(
+    page: int = 1,
+    per_page: int = 10,
+    order_type: Optional[str] = None,
+    status: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get orders for the logged-in customer"""
+    user_id = payload.get("user_id")
+    
+    # Extract customer ID from token
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+    else:
+        # Try to find customer by email
+        customer = db.customers.find_one({"email": user_id})
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer_id = customer["id"]
+    
+    query = {"customer_id": customer_id}
+    
+    if order_type and order_type != "all":
+        query["order_type"] = order_type
+    if status and status != "all" and status != "All":
+        query["status"] = status
+    
+    total = db.orders_v2.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    orders = list(db.orders_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": orders,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/customer/orders/{order_id}")
+async def get_customer_order(order_id: str, payload: dict = Depends(verify_token)):
+    """Get a specific order for the logged-in customer"""
+    user_id = payload.get("user_id")
+    
+    # Extract customer ID from token
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+    else:
+        customer = db.customers.find_one({"email": user_id})
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer_id = customer["id"]
+    
+    order = db.orders_v2.find_one({"id": order_id, "customer_id": customer_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    return {"order": order, "data": order}
+
 @app.put("/api/orders/v2/{order_id}")
 async def update_order_v2(order_id: str, items: List[OrderItemCreate], payload: dict = Depends(verify_token)):
     """Update order items (only if order is editable)"""
@@ -1214,6 +1278,34 @@ async def cancel_order_v2(order_id: str, payload: dict = Depends(verify_token)):
     
     return {"success": True, "message": "Order cancelled"}
 
+@app.put("/api/orders/v2/{order_id}/status")
+async def update_order_status_v2(order_id: str, status: str = Body(..., embed=True), payload: dict = Depends(verify_token)):
+    """Update order status (for Dispatched, Completed, etc.)"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager", "sales person"]:
+        raise HTTPException(status_code=403, detail="Only admin can update order status")
+    
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    valid_statuses = ["Pending", "Confirmed", "Dispatched", "Completed", "Cancelled"]
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    update_data = {
+        "status": status,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Mark as non-editable for certain statuses
+    if status in ["Confirmed", "Dispatched", "Completed", "Cancelled"]:
+        update_data["is_editable"] = False
+    
+    db.orders_v2.update_one({"id": order_id}, {"$set": update_data})
+    
+    return {"success": True, "message": f"Order status updated to {status}"}
+
 # ============ INVOICE ROUTES (V2) ============
 
 @app.get("/api/invoices/v2")
@@ -1263,6 +1355,69 @@ async def get_invoice_v2(invoice_id: str, payload: dict = Depends(verify_token))
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"invoice": invoice}
+
+# Customer-specific invoice endpoints
+@app.get("/api/customer/invoices")
+async def get_customer_invoices(
+    page: int = 1,
+    per_page: int = 10,
+    order_type: Optional[str] = None,
+    status: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get invoices for the logged-in customer"""
+    user_id = payload.get("user_id")
+    
+    # Extract customer ID from token
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+    else:
+        customer = db.customers.find_one({"email": user_id})
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer_id = customer["id"]
+    
+    query = {"customer_id": customer_id}
+    
+    if order_type and order_type != "all":
+        query["order_type"] = order_type
+    if status and status != "all" and status != "All":
+        query["status"] = status
+    
+    total = db.invoices_v2.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    invoices = list(db.invoices_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    return {
+        "data": invoices,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/customer/invoices/{invoice_id}")
+async def get_customer_invoice(invoice_id: str, payload: dict = Depends(verify_token)):
+    """Get a specific invoice for the logged-in customer"""
+    user_id = payload.get("user_id")
+    
+    # Extract customer ID from token
+    if user_id.startswith("customer_"):
+        customer_id = int(user_id.replace("customer_", ""))
+    else:
+        customer = db.customers.find_one({"email": user_id})
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer_id = customer["id"]
+    
+    invoice = db.invoices_v2.find_one({"id": invoice_id, "customer_id": customer_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    return {"invoice": invoice, "data": invoice}
 
 @app.put("/api/invoices/v2/{invoice_id}/status")
 async def update_invoice_status_v2(invoice_id: str, status: str = Body(..., embed=True), payload: dict = Depends(verify_token)):
