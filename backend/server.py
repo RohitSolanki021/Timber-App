@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, Body, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime, timezone, timedelta
@@ -13,6 +13,7 @@ import secrets
 import re
 import json
 import base64
+import io
 
 app = FastAPI(title="Natural Plylam Admin API")
 
@@ -760,6 +761,308 @@ async def calculate_price(
         "price_unit": product.get("price_unit", "sq.mt")
     }
 
+# ============ PRODUCT MANAGEMENT WITH VARIANTS ============
+
+class ProductVariant(BaseModel):
+    thickness: str
+    size: str
+    stock: int = 0
+    prices: Dict[str, float]  # tier_num -> price
+
+class ProductWithVariants(BaseModel):
+    name: str
+    group: str  # Plywood or Timber
+    description: Optional[str] = ""
+    variants: List[ProductVariant]
+
+@app.post("/api/admin/products-v2")
+async def create_product_v2(product: ProductWithVariants, payload: dict = Depends(verify_token)):
+    """Create a new product with variants (thickness/size) and tier pricing"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only admin can create products")
+    
+    # Generate product ID
+    product_id = f"{product.group[:3].upper()}-{secrets.token_hex(4).upper()}"
+    
+    # Collect all unique thicknesses, sizes, and build pricing tiers
+    thicknesses = list(set(v.thickness for v in product.variants))
+    sizes = list(set(v.size for v in product.variants))
+    
+    # Use first variant's tier 1 price as base
+    base_price = product.variants[0].prices.get("1", 0) if product.variants else 0
+    pricing_tiers = product.variants[0].prices if product.variants else {}
+    
+    # Create the product
+    product_doc = {
+        "id": product_id,
+        "name": product.name,
+        "group": product.group,
+        "description": product.description or "",
+        "base_price": base_price,
+        "price_unit": "piece",
+        "thicknesses": sorted(thicknesses, key=lambda x: float(x) if x.replace('.','').isdigit() else 0),
+        "sizes": sorted(sizes),
+        "pricing_tiers": pricing_tiers,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.products_v2.insert_one(product_doc)
+    
+    # Create stock entries for each variant
+    for variant in product.variants:
+        stock_key = f"{product_id}_{variant.thickness}_{variant.size.replace(' ', '').replace('x', 'X')}"
+        stock_doc = {
+            "stock_key": stock_key,
+            "product_id": product_id,
+            "thickness": variant.thickness,
+            "size": variant.size,
+            "quantity": variant.stock,
+            "reserved": 0,
+            "variant_prices": variant.prices,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        db.stock.update_one(
+            {"stock_key": stock_key},
+            {"$set": stock_doc},
+            upsert=True
+        )
+    
+    del product_doc["_id"]
+    return {"success": True, "message": "Product created", "product": product_doc}
+
+@app.get("/api/admin/products-v2/template")
+async def download_product_template(payload: dict = Depends(verify_token)):
+    """Download Excel template for product import"""
+    try:
+        import pandas as pd
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Products"
+        
+        # Headers
+        headers = ["Product Name", "Group (Plywood/Timber)", "Description", "Thickness (mm)", "Size", "Stock Qty", 
+                   "Tier 1 Price", "Tier 2 Price", "Tier 3 Price", "Tier 4 Price", "Tier 5 Price", "Tier 6 Price"]
+        
+        header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Sample data rows
+        sample_data = [
+            ["MR Plywood", "Plywood", "Moisture Resistant", "6", "8x4", 100, 500, 480, 460, 440, 420, 400],
+            ["MR Plywood", "Plywood", "Moisture Resistant", "12", "8x4", 50, 800, 770, 740, 710, 680, 650],
+            ["BWR Plywood", "Plywood", "Boiling Water Resistant", "19", "8x4", 75, 1200, 1150, 1100, 1050, 1000, 950],
+            ["Teak Wood", "Timber", "Premium Teak", "25", "8x4", 30, 2500, 2400, 2300, 2200, 2100, 2000],
+        ]
+        
+        for row_idx, row_data in enumerate(sample_data, 2):
+            for col_idx, value in enumerate(row_data, 1):
+                ws.cell(row=row_idx, column=col_idx, value=value)
+        
+        # Adjust column widths
+        column_widths = [20, 20, 25, 15, 10, 10, 12, 12, 12, 12, 12, 12]
+        for idx, width in enumerate(column_widths, 1):
+            ws.column_dimensions[chr(64 + idx)].width = width
+        
+        # Instructions sheet
+        ws2 = wb.create_sheet("Instructions")
+        instructions = [
+            "PRODUCT IMPORT INSTRUCTIONS",
+            "",
+            "1. Product Name: Name of the product (e.g., 'MR Plywood', 'BWR Plywood')",
+            "2. Group: Must be exactly 'Plywood' or 'Timber'",
+            "3. Description: Optional product description",
+            "4. Thickness: Thickness in mm (e.g., 6, 12, 19, 25)",
+            "5. Size: Size format (e.g., '8x4', '10x4')",
+            "6. Stock Qty: Initial stock quantity",
+            "7-12. Tier Prices: Price for each customer tier (1-6)",
+            "",
+            "NOTES:",
+            "- Each row represents one product variant (thickness + size combination)",
+            "- Same product name can have multiple rows for different variants",
+            "- All price fields are required",
+            "- Do not change the header row",
+        ]
+        for idx, line in enumerate(instructions, 1):
+            ws2.cell(row=idx, column=1, value=line)
+        
+        # Save to bytes
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=product_import_template.xlsx"}
+        )
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Excel libraries not installed")
+
+@app.post("/api/admin/products-v2/import")
+async def import_products_from_excel(file: UploadFile = File(...), payload: dict = Depends(verify_token)):
+    """Import products from Excel file"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only admin can import products")
+    
+    try:
+        import pandas as pd
+        
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents), sheet_name=0)
+        
+        # Expected columns
+        required_cols = ["Product Name", "Group (Plywood/Timber)", "Thickness (mm)", "Size", "Stock Qty", 
+                         "Tier 1 Price", "Tier 2 Price", "Tier 3 Price", "Tier 4 Price", "Tier 5 Price", "Tier 6 Price"]
+        
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            raise HTTPException(status_code=400, detail=f"Missing columns: {missing_cols}")
+        
+        # Group rows by product name
+        products_created = 0
+        variants_created = 0
+        errors = []
+        
+        grouped = df.groupby(["Product Name", "Group (Plywood/Timber)"])
+        
+        for (name, group), rows in grouped:
+            # Generate product ID
+            group_prefix = str(group)[:3].upper() if isinstance(group, str) else "PRD"
+            product_id = f"{group_prefix}-{secrets.token_hex(4).upper()}"
+            
+            variants = []
+            thicknesses = []
+            sizes = []
+            
+            for _, row in rows.iterrows():
+                try:
+                    thickness = str(row["Thickness (mm)"])
+                    size = str(row["Size"])
+                    stock = int(row.get("Stock Qty", 0) or 0)
+                    
+                    prices = {}
+                    for tier in range(1, 7):
+                        price_col = f"Tier {tier} Price"
+                        prices[str(tier)] = float(row.get(price_col, 0) or 0)
+                    
+                    thicknesses.append(thickness)
+                    sizes.append(size)
+                    
+                    # Create stock entry
+                    stock_key = f"{product_id}_{thickness}_{size.replace(' ', '').replace('x', 'X')}"
+                    stock_doc = {
+                        "stock_key": stock_key,
+                        "product_id": product_id,
+                        "thickness": thickness,
+                        "size": size,
+                        "quantity": stock,
+                        "reserved": 0,
+                        "variant_prices": prices,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    db.stock.update_one({"stock_key": stock_key}, {"$set": stock_doc}, upsert=True)
+                    variants_created += 1
+                    
+                except Exception as e:
+                    errors.append(f"Row error for {name}: {str(e)}")
+            
+            # Create product document
+            first_row = rows.iloc[0]
+            base_price = float(first_row.get("Tier 1 Price", 0) or 0)
+            pricing_tiers = {str(i): float(first_row.get(f"Tier {i} Price", 0) or 0) for i in range(1, 7)}
+            
+            product_doc = {
+                "id": product_id,
+                "name": str(name),
+                "group": str(group),
+                "description": str(first_row.get("Description", "") or ""),
+                "base_price": base_price,
+                "price_unit": "piece",
+                "thicknesses": sorted(list(set(thicknesses)), key=lambda x: float(x) if x.replace('.','').isdigit() else 0),
+                "sizes": sorted(list(set(sizes))),
+                "pricing_tiers": pricing_tiers,
+                "is_active": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            db.products_v2.insert_one(product_doc)
+            products_created += 1
+        
+        return {
+            "success": True,
+            "message": f"Import completed",
+            "products_created": products_created,
+            "variants_created": variants_created,
+            "errors": errors
+        }
+        
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Excel libraries not installed")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Import error: {str(e)}")
+
+@app.get("/api/admin/products-v2/export")
+async def export_products_to_excel(payload: dict = Depends(verify_token)):
+    """Export all products to Excel"""
+    try:
+        import pandas as pd
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        # Fetch all products and their stock/variants
+        products = list(db.products_v2.find({}, {"_id": 0}))
+        
+        rows = []
+        for product in products:
+            stocks = list(db.stock.find({"product_id": product["id"]}, {"_id": 0}))
+            
+            for stock in stocks:
+                prices = stock.get("variant_prices", product.get("pricing_tiers", {}))
+                row = {
+                    "Product Name": product["name"],
+                    "Group (Plywood/Timber)": product["group"],
+                    "Description": product.get("description", ""),
+                    "Thickness (mm)": stock.get("thickness", ""),
+                    "Size": stock.get("size", ""),
+                    "Stock Qty": stock.get("quantity", 0),
+                    "Tier 1 Price": prices.get("1", 0),
+                    "Tier 2 Price": prices.get("2", 0),
+                    "Tier 3 Price": prices.get("3", 0),
+                    "Tier 4 Price": prices.get("4", 0),
+                    "Tier 5 Price": prices.get("5", 0),
+                    "Tier 6 Price": prices.get("6", 0),
+                }
+                rows.append(row)
+        
+        df = pd.DataFrame(rows)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Products')
+        output.seek(0)
+        
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=products_export_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        )
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Excel libraries not installed")
+
 # ============ DIRECT ORDER ROUTES ============
 
 @app.post("/api/orders/direct")
@@ -1135,6 +1438,44 @@ class AdminOrderItemsUpdate(BaseModel):
     items: List[dict]
     notes: Optional[str] = None
 
+@app.put("/api/orders/v2/{order_id}/items")
+async def update_order_items_v2(order_id: str, body: AdminOrderItemsUpdate, payload: dict = Depends(verify_token)):
+    """Admin can update order items and prices before approval"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin", "manager", "sales person"]:
+        raise HTTPException(status_code=403, detail="Not authorized to update order prices")
+    
+    order = db.orders_v2.find_one({"id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get("status") != "Pending":
+        raise HTTPException(status_code=400, detail="Can only update pending orders")
+    
+    items = body.items
+    # Update items with admin-provided prices
+    total = sum(item.get("total_price", item.get("unit_price", 0) * item.get("quantity", 1)) for item in items)
+    total_qty = sum(item.get("quantity", 1) for item in items)
+    
+    update_data = {
+        "items": items,
+        "total_quantity": total_qty,
+        "sub_total": total,
+        "cgst": round(total * 0.09, 2),
+        "sgst": round(total * 0.09, 2),
+        "grand_total": round(total * 1.18, 2),
+        "price_modified_by": payload.get("user_id"),
+        "price_modified_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if body.notes:
+        update_data["admin_notes"] = body.notes
+    
+    db.orders_v2.update_one({"id": order_id}, {"$set": update_data})
+    
+    return {"success": True, "message": "Order prices updated", "new_total": round(total * 1.18, 2)}
+
 @app.put("/api/admin/orders/{order_id}/items")
 async def admin_update_order_items(order_id: str, body: AdminOrderItemsUpdate, payload: dict = Depends(verify_token)):
     """Admin can update order items and prices before approval"""
@@ -1212,7 +1553,7 @@ async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token))
     db.orders_v2.update_one(
         {"id": order_id},
         {"$set": {
-            "status": "Confirmed",
+            "status": "Approved",
             "is_editable": False,
             "confirmed_at": datetime.now(timezone.utc).isoformat(),
             "confirmed_by": payload.get("user_id"),
@@ -1224,7 +1565,7 @@ async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token))
     db.invoices_v2.update_one(
         {"order_id": order_id},
         {"$set": {
-            "status": "Confirmed",
+            "status": "Approved",
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
@@ -1258,7 +1599,7 @@ async def cancel_order_v2(order_id: str, payload: dict = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Order not found")
     
     # If order was confirmed, restore stock
-    if order.get("status") == "Confirmed":
+    if order.get("status") == "Approved":
         for item in order.get("items", []):
             stock_key = f"{item['product_id']}_{item['thickness']}_{item['size'].replace(' ', '').replace('x', 'X')}"
             db.stock.update_one(
@@ -1289,7 +1630,7 @@ async def update_order_status_v2(order_id: str, status: str = Body(..., embed=Tr
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    valid_statuses = ["Pending", "Confirmed", "Dispatched", "Completed", "Cancelled"]
+    valid_statuses = ["Pending", "Approved", "Delivered", "Cancelled"]
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
@@ -1299,7 +1640,7 @@ async def update_order_status_v2(order_id: str, status: str = Body(..., embed=Tr
     }
     
     # Mark as non-editable for certain statuses
-    if status in ["Confirmed", "Dispatched", "Completed", "Cancelled"]:
+    if status in ["Approved", "Delivered", "Cancelled"]:
         update_data["is_editable"] = False
     
     db.orders_v2.update_one({"id": order_id}, {"$set": update_data})
@@ -1578,7 +1919,7 @@ async def get_admin_dashboard_v2(payload: dict = Depends(verify_token)):
     
     # Get counts
     pending_orders = db.orders_v2.count_documents({"status": "Pending"})
-    confirmed_orders = db.orders_v2.count_documents({"status": "Confirmed"})
+    confirmed_orders = db.orders_v2.count_documents({"status": "Approved"})
     
     plywood_orders = db.orders_v2.count_documents({"order_type": "Plywood"})
     timber_orders = db.orders_v2.count_documents({"order_type": "Timber"})

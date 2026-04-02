@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
 import { 
-  ClipboardList, ChevronRight, ChevronLeft, Search, Package, Calendar, 
-  IndianRupee, CheckCircle2, XCircle, TreePine, Filter, Eye, MoreVertical
+  ClipboardList, ChevronRight, ChevronLeft, Search, Package,
+  CheckCircle2, XCircle, TreePine, Eye, Edit3, Save, X
 } from "lucide-react";
 import { useToast } from "../components/ui/Toast";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
@@ -13,22 +12,24 @@ const API_BASE = (() => {
   return `${window.location.origin}/api`;
 })();
 
+interface OrderItem {
+  product_group: string;
+  product_id: string;
+  product_name: string;
+  thickness: string;
+  size: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
 interface OrderV2 {
   id: string;
   customer_id: number;
   customerName: string;
   order_type: 'Plywood' | 'Timber';
   status: string;
-  items: Array<{
-    product_group: string;
-    product_id: string;
-    product_name: string;
-    thickness: string;
-    size: string;
-    quantity: number;
-    unit_price: number;
-    total_price: number;
-  }>;
+  items: OrderItem[];
   total_quantity: number;
   sub_total: number;
   cgst: number;
@@ -51,6 +52,9 @@ interface OrderV2 {
 
 const ORDERS_PER_PAGE = 10;
 
+// Simplified statuses
+const ORDER_STATUSES = ["All", "Pending", "Approved", "Delivered", "Cancelled"];
+
 export default function OrdersV2() {
   const toast = useToast();
   const [orders, setOrders] = useState<OrderV2[]>([]);
@@ -63,13 +67,17 @@ export default function OrdersV2() {
   const [total, setTotal] = useState(0);
   
   // Action states
-  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; order: OrderV2 | null; action: 'confirm' | 'cancel' }>({ 
-    open: false, order: null, action: 'confirm' 
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; order: OrderV2 | null; action: 'approve' | 'cancel' }>({ 
+    open: false, order: null, action: 'approve' 
   });
   const [actionLoading, setActionLoading] = useState(false);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   
-  // Selected order for detail view
+  // Edit order modal
+  const [editOrder, setEditOrder] = useState<OrderV2 | null>(null);
+  const [editItems, setEditItems] = useState<OrderItem[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  
+  // View order detail
   const [selectedOrder, setSelectedOrder] = useState<OrderV2 | null>(null);
 
   const getToken = () => localStorage.getItem('token');
@@ -113,21 +121,76 @@ export default function OrdersV2() {
     return () => clearTimeout(timer);
   }, [loadOrders]);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClick = () => setOpenDropdownId(null);
-    if (openDropdownId) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [openDropdownId]);
+  // Open edit modal
+  const handleEditOrder = (order: OrderV2) => {
+    setEditOrder(order);
+    setEditItems(order.items.map(item => ({ ...item })));
+  };
 
-  const handleConfirmOrder = async () => {
+  // Update item price in edit modal
+  const updateItemPrice = (index: number, newPrice: number) => {
+    setEditItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      return {
+        ...item,
+        unit_price: newPrice,
+        total_price: newPrice * item.quantity
+      };
+    }));
+  };
+
+  // Update item quantity in edit modal
+  const updateItemQuantity = (index: number, newQty: number) => {
+    setEditItems(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      return {
+        ...item,
+        quantity: newQty,
+        total_price: item.unit_price * newQty
+      };
+    }));
+  };
+
+  // Calculate totals for edit modal
+  const editSubTotal = editItems.reduce((sum, item) => sum + item.total_price, 0);
+  const editCgst = editSubTotal * 0.09;
+  const editSgst = editSubTotal * 0.09;
+  const editGrandTotal = editSubTotal + editCgst + editSgst;
+
+  // Save edited order
+  const handleSaveEdit = async () => {
+    if (!editOrder) return;
+    
+    setEditSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/orders/v2/${editOrder.id}/items`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ items: editItems })
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to update order');
+      }
+      
+      toast.success('Order Updated', 'Prices have been updated successfully');
+      setEditOrder(null);
+      loadOrders();
+    } catch (err: any) {
+      toast.error('Update Failed', err.message);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Approve order
+  const handleApproveOrder = async () => {
     if (!confirmDialog.order) return;
     
     setActionLoading(true);
     try {
-      const endpoint = confirmDialog.action === 'confirm' 
+      const endpoint = confirmDialog.action === 'approve' 
         ? `/orders/v2/${confirmDialog.order.id}/confirm`
         : `/orders/v2/${confirmDialog.order.id}/cancel`;
       
@@ -142,13 +205,13 @@ export default function OrdersV2() {
       }
       
       toast.success(
-        confirmDialog.action === 'confirm' ? 'Order Confirmed' : 'Order Cancelled',
-        confirmDialog.action === 'confirm' 
-          ? `Order ${confirmDialog.order.id} has been confirmed and invoice created`
+        confirmDialog.action === 'approve' ? 'Order Approved' : 'Order Cancelled',
+        confirmDialog.action === 'approve' 
+          ? `Order ${confirmDialog.order.id} has been approved and invoice created`
           : `Order ${confirmDialog.order.id} has been cancelled`
       );
       
-      setConfirmDialog({ open: false, order: null, action: 'confirm' });
+      setConfirmDialog({ open: false, order: null, action: 'approve' });
       loadOrders();
     } catch (err: any) {
       toast.error('Action Failed', err.message);
@@ -157,7 +220,6 @@ export default function OrdersV2() {
     }
   };
 
-  const statuses = ["All", "Pending", "Confirmed", "Dispatched", "Completed", "Cancelled"];
   const orderTypes = [
     { value: 'all', label: 'All Types', icon: ClipboardList },
     { value: 'Plywood', label: 'Plywood', icon: Package },
@@ -167,9 +229,8 @@ export default function OrdersV2() {
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       pending: 'bg-amber-100 text-amber-700',
-      confirmed: 'bg-emerald-100 text-emerald-700',
-      dispatched: 'bg-cyan-100 text-cyan-700',
-      completed: 'bg-blue-100 text-blue-700',
+      approved: 'bg-emerald-100 text-emerald-700',
+      delivered: 'bg-blue-100 text-blue-700',
       cancelled: 'bg-red-100 text-red-700'
     };
     return styles[status.toLowerCase()] || 'bg-slate-100 text-slate-700';
@@ -189,7 +250,7 @@ export default function OrdersV2() {
           <h1 className="text-2xl lg:text-3xl font-bold text-slate-900" data-testid="orders-title">
             Orders (B2B)
           </h1>
-          <p className="text-slate-500 mt-1">Manage Plywood & Timber orders - Confirm pending orders</p>
+          <p className="text-slate-500 mt-1">Manage orders - Edit prices & Approve pending orders</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-sm font-medium">
@@ -235,7 +296,7 @@ export default function OrdersV2() {
         
         {/* Status Filter */}
         <div className="flex flex-wrap gap-2" data-testid="status-filters">
-          {statuses.map((status) => (
+          {ORDER_STATUSES.map((status) => (
             <button
               key={status}
               onClick={() => { setStatusFilter(status); setPage(1); }}
@@ -246,7 +307,7 @@ export default function OrdersV2() {
               }`}
               data-testid={`filter-${status.toLowerCase()}`}
             >
-              {status}
+              {status === 'Pending' ? 'Order Placed' : status}
             </button>
           ))}
         </div>
@@ -326,7 +387,7 @@ export default function OrdersV2() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                        {order.status}
+                        {order.status === 'Pending' ? 'Order Placed' : order.status}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -334,12 +395,21 @@ export default function OrdersV2() {
                         {order.status === 'Pending' && (
                           <>
                             <button
-                              onClick={() => setConfirmDialog({ open: true, order, action: 'confirm' })}
+                              onClick={() => handleEditOrder(order)}
+                              className="px-3 py-1.5 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg hover:bg-blue-200 transition-colors flex items-center gap-1"
+                              data-testid={`edit-order-${order.id}`}
+                              title="Edit prices before approving"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setConfirmDialog({ open: true, order, action: 'approve' })}
                               className="px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1"
-                              data-testid={`confirm-order-${order.id}`}
+                              data-testid={`approve-order-${order.id}`}
                             >
                               <CheckCircle2 className="w-4 h-4" />
-                              Confirm
+                              Approve
                             </button>
                             <button
                               onClick={() => setConfirmDialog({ open: true, order, action: 'cancel' })}
@@ -390,7 +460,7 @@ export default function OrdersV2() {
                     </div>
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                    {order.status}
+                    {order.status === 'Pending' ? 'Order Placed' : order.status}
                   </span>
                 </div>
                 
@@ -407,15 +477,22 @@ export default function OrdersV2() {
                 {order.status === 'Pending' && (
                   <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
                     <button
-                      onClick={() => setConfirmDialog({ open: true, order, action: 'confirm' })}
-                      className="flex-1 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1"
+                      onClick={() => handleEditOrder(order)}
+                      className="flex-1 py-2 bg-blue-100 text-blue-700 text-sm font-medium rounded-lg flex items-center justify-center gap-1"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setConfirmDialog({ open: true, order, action: 'approve' })}
+                      className="flex-1 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-1"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      Confirm
+                      Approve
                     </button>
                     <button
                       onClick={() => setConfirmDialog({ open: true, order, action: 'cancel' })}
-                      className="flex-1 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-lg hover:bg-red-200 transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-2 bg-red-100 text-red-700 text-sm font-medium rounded-lg flex items-center justify-center gap-1"
                     >
                       <XCircle className="w-4 h-4" />
                       Cancel
@@ -470,6 +547,129 @@ export default function OrdersV2() {
         </div>
       )}
 
+      {/* Edit Order Modal */}
+      {editOrder && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-auto">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Edit Order Prices</h2>
+                <p className="text-sm text-slate-500">Order {editOrder.id} - {editOrder.customerName}</p>
+              </div>
+              <button 
+                onClick={() => setEditOrder(null)}
+                className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Items Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Product</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Variant</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Qty</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Unit Price</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {editItems.map((item, index) => (
+                      <tr key={index}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-900">{item.product_name}</p>
+                          <p className="text-xs text-slate-500">{item.product_group}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-slate-600">{item.thickness}mm × {item.size}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItemQuantity(index, parseInt(e.target.value) || 1)}
+                            className="w-20 px-3 py-2 text-center border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center">
+                            <span className="text-slate-400 mr-1">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unit_price}
+                              onChange={(e) => updateItemPrice(index, parseFloat(e.target.value) || 0)}
+                              className="w-24 px-3 py-2 text-center border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="font-semibold text-slate-900">₹{item.total_price.toLocaleString()}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Totals */}
+              <div className="bg-slate-900 text-white rounded-xl p-4">
+                <div className="flex justify-between mb-2">
+                  <span className="text-slate-300">Sub Total</span>
+                  <span>₹{editSubTotal.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-slate-300">CGST (9%)</span>
+                  <span>₹{editCgst.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between mb-2">
+                  <span className="text-slate-300">SGST (9%)</span>
+                  <span>₹{editSgst.toLocaleString()}</span>
+                </div>
+                <div className="h-px bg-slate-700 my-3"></div>
+                <div className="flex justify-between text-lg font-bold">
+                  <span>Grand Total</span>
+                  <span>₹{editGrandTotal.toLocaleString()}</span>
+                </div>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditOrder(null)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={editSaving}
+                  className="flex-1 py-3 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {editSaving ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Save & Continue
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Order Detail Modal */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -483,7 +683,7 @@ export default function OrdersV2() {
                 onClick={() => setSelectedOrder(null)}
                 className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200"
               >
-                <XCircle className="w-5 h-5 text-slate-500" />
+                <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
             
@@ -498,7 +698,9 @@ export default function OrdersV2() {
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl">
                   <p className="text-xs text-slate-500 uppercase">Status</p>
-                  <p className="font-semibold text-slate-900">{selectedOrder.status}</p>
+                  <p className="font-semibold text-slate-900">
+                    {selectedOrder.status === 'Pending' ? 'Order Placed' : selectedOrder.status}
+                  </p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl">
                   <p className="text-xs text-slate-500 uppercase">Pricing Tier</p>
@@ -581,22 +783,22 @@ export default function OrdersV2() {
                   <button
                     onClick={() => {
                       setSelectedOrder(null);
-                      setConfirmDialog({ open: true, order: selectedOrder, action: 'confirm' });
+                      handleEditOrder(selectedOrder);
                     }}
-                    className="flex-1 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 py-3 bg-blue-100 text-blue-700 font-semibold rounded-xl hover:bg-blue-200 transition-colors flex items-center justify-center gap-2"
                   >
-                    <CheckCircle2 className="w-5 h-5" />
-                    Confirm Order
+                    <Edit3 className="w-5 h-5" />
+                    Edit Prices
                   </button>
                   <button
                     onClick={() => {
                       setSelectedOrder(null);
-                      setConfirmDialog({ open: true, order: selectedOrder, action: 'cancel' });
+                      setConfirmDialog({ open: true, order: selectedOrder, action: 'approve' });
                     }}
-                    className="flex-1 py-3 bg-red-100 text-red-700 font-semibold rounded-xl hover:bg-red-200 transition-colors flex items-center justify-center gap-2"
+                    className="flex-1 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
                   >
-                    <XCircle className="w-5 h-5" />
-                    Cancel Order
+                    <CheckCircle2 className="w-5 h-5" />
+                    Approve Order
                   </button>
                 </div>
               )}
@@ -608,17 +810,17 @@ export default function OrdersV2() {
       {/* Confirm Dialog */}
       <ConfirmDialog
         isOpen={confirmDialog.open}
-        onClose={() => setConfirmDialog({ open: false, order: null, action: 'confirm' })}
-        onConfirm={handleConfirmOrder}
+        onClose={() => setConfirmDialog({ open: false, order: null, action: 'approve' })}
+        onConfirm={handleApproveOrder}
         loading={actionLoading}
-        title={confirmDialog.action === 'confirm' ? 'Confirm Order' : 'Cancel Order'}
+        title={confirmDialog.action === 'approve' ? 'Approve Order' : 'Cancel Order'}
         message={
-          confirmDialog.action === 'confirm'
-            ? `Are you sure you want to confirm order ${confirmDialog.order?.id}? This will lock the order, deduct stock, and create an invoice.`
+          confirmDialog.action === 'approve'
+            ? `Are you sure you want to approve order ${confirmDialog.order?.id}? This will lock the order, deduct stock, and create an invoice.`
             : `Are you sure you want to cancel order ${confirmDialog.order?.id}? This action cannot be undone.`
         }
-        confirmText={confirmDialog.action === 'confirm' ? 'Confirm Order' : 'Cancel Order'}
-        variant={confirmDialog.action === 'confirm' ? 'info' : 'danger'}
+        confirmText={confirmDialog.action === 'approve' ? 'Approve Order' : 'Cancel Order'}
+        variant={confirmDialog.action === 'approve' ? 'info' : 'danger'}
       />
     </div>
   );

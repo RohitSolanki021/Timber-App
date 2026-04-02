@@ -4,6 +4,7 @@ import { ToastProvider } from "./components/ui/Toast";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
+import ProductsV2 from "./pages/ProductsV2";
 import ProductDetail from "./pages/ProductDetail";
 import OrdersV2 from "./pages/OrdersV2";
 import OrderDetail from "./pages/OrderDetail";
@@ -85,7 +86,8 @@ export default function App() {
           {/* Protected Admin Routes */}
           <Route element={<AdminRoute><Layout /></AdminRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/products" element={<Products />} />
+            <Route path="/products" element={<ProductsV2 />} />
+            <Route path="/products-old" element={<Products />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/customer/:id" element={<CustomerDetail />} />
