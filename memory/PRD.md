@@ -19,45 +19,54 @@ Transform the application into a **B2B Plywood/Timber direct ordering system** w
 - **Backend**: FastAPI (Python) with MongoDB
 - **Authentication**: JWT-based with role-based access
 
-## Implemented Features (March 30, 2026)
+## Implemented Features (March 30 - April 2, 2026)
 
-### B2B Ordering System (NEW)
-- **Fast Order Page**: Horizontal row-based layout matching reference design
-  - Product | Thickness | Size | Qty | Amount columns
-  - **Searchable product dropdown** - Type to filter products (handles 100s of items)
-  - Auto-cascading dropdowns (selecting one opens next)
+### B2B Ordering System
+- **Fast Order Page**: Horizontal row-based layout
+  - **Searchable product dropdown** - Type to filter products
+  - Auto-cascading dropdowns (Product → Thickness → Size)
   - **Auto-select last ordered product** on page load
-  - **Copy product on "+ Add Product"** for quick variant ordering
+  - **Copy product on "+ Add Product"**
+  - **Transport Details Popup** - Self Pickup/Delivery, Vehicle Number, Driver details
   - Multiple products per order
   - "Upload Invoice / Photo Order" option
   - Bottom summary: Total Qty | Total Amount
 
-- **Split Billing**: One order with mixed items creates 2 separate bills
-  - Plywood items → Plywood order/invoice
-  - Timber items → Timber order/invoice
+- **Product Catalog Page**: Browse products like e-commerce
+  - All/Plywood/Timber filter tabs
+  - Shows: Name, Price, Description, Thickness options, Size options
+  - "Order Now" button links to order page with product pre-selected
+
+- **Split Billing**: One order with mixed items creates separate bills
+  - Plywood items → Plywood order + Plywood invoice
+  - Timber items → Timber order + Timber invoice
+  - Invoices created immediately when order is placed
 
 - **6 Pricing Tiers**: Customer pricing based on tier (1-6)
-  - Each product has `pricing_tiers` object
+  - Tier 1 = Highest price, Tier 6 = Lowest price
   - Price auto-calculated based on customer's tier
 
 - **Stock Management**: Stock tracked by product + thickness + size
-  - `/api/stock/check` endpoint validates availability
-  - Stock deducted on order confirmation
+- **Order Edit/Lock**: Orders editable until admin confirms
 
-- **Order Edit/Lock**: Orders are editable until admin confirms
-  - `is_editable: true` until status = "Confirmed"
+### Admin Features
+- **Dashboard with Plywood/Timber sections**: Separate latest orders lists
+- **Pending on Top**: Orders and customers sorted with pending first
+- **Admin Price Edit**: Can modify order prices before approval
+- **Admin Customer Creation**: Can add new customers (auto-approved)
+- **Product/Client Analytics**: Sales by product, sales by customer
 
-### MPIN Quick Login (NEW)
-- **Set MPIN in Profile**: Users can set 4-6 digit MPIN
-- **Login with Phone + MPIN**: Quick login without email/password
-- **Email | MPIN toggle** on login page
-- APIs: `/api/mpin/set`, `/api/mpin/login`, `/api/mpin/check`
+### MPIN Quick Login
+- Set 4-6 digit MPIN in Profile
+- Login with Phone + MPIN
 
-### Admin Banner System (NEW)
-- **Admin can create/edit/delete banners**
-- **Banners displayed on customer homepage** (above Quick Order)
-- Supports: title, description, image_url, link_url
-- APIs: `/api/banners` (public), `/api/admin/banners` (admin)
+### Banner System
+- Admin can create/edit/delete banners
+- Banners displayed on customer homepage
+
+### Sales Portal
+- Same order process as customer
+- Customers created by sales are auto-approved
 
 ### Backend V2 APIs
 - `GET /api/product-groups` - Plywood/Timber groups

@@ -11,13 +11,14 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Package
+  Package,
+  TreePine
 } from "lucide-react";
 
 export default function Dashboard() {
   const [user, setUser] = useState<UserType | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [kpis, setKpis] = useState<{ pending_orders_count?: number; new_orders_week?: number; due_invoices_count?: number } | null>(null);
+  const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function Dashboard() {
         ]);
         setUser(userData);
         setOrders(ordersResponse.data);
-        setKpis(dashboardResponse);
+        setDashboardData(dashboardResponse);
       } catch (err) {
         console.error(err);
       } finally {
@@ -59,10 +60,13 @@ export default function Dashboard() {
     );
   }
 
+  // Use V2 dashboard data
+  const totalOrders = (dashboardData?.plywood_orders_count || 0) + (dashboardData?.timber_orders_count || 0);
+
   const statCards = [
     {
-      label: "Awaiting Approval",
-      value: kpis?.pending_orders_count ?? summary.pendingApproval,
+      label: "Pending Orders",
+      value: dashboardData?.pending_orders ?? summary.pendingApproval,
       icon: Clock,
       color: "bg-amber-500",
       bgColor: "bg-amber-50",
@@ -71,7 +75,7 @@ export default function Dashboard() {
     },
     {
       label: "Total Orders",
-      value: kpis?.new_orders_week ?? orders.length,
+      value: totalOrders || orders.length,
       icon: ClipboardList,
       color: "bg-blue-500",
       bgColor: "bg-blue-50",
@@ -79,8 +83,8 @@ export default function Dashboard() {
       link: "/orders"
     },
     {
-      label: "Due Invoices",
-      value: kpis?.due_invoices_count ?? 0,
+      label: "Pending Invoices",
+      value: dashboardData?.pending_invoices ?? 0,
       icon: FileText,
       color: "bg-red-500",
       bgColor: "bg-red-50",
@@ -88,13 +92,13 @@ export default function Dashboard() {
       link: "/invoices"
     },
     {
-      label: "Completed",
-      value: summary.completed,
-      icon: CheckCircle2,
+      label: "Customers",
+      value: dashboardData?.total_customers ?? 0,
+      icon: Users,
       color: "bg-emerald-500",
       bgColor: "bg-emerald-50",
       textColor: "text-emerald-600",
-      link: "/orders"
+      link: "/customers"
     }
   ];
 
@@ -154,52 +158,81 @@ export default function Dashboard() {
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Latest Orders */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="latest-orders-section">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">Latest Orders</h2>
-            <Link 
-              to="/orders" 
-              className="text-primary text-sm font-medium flex items-center gap-1 hover:gap-2 transition-all"
-              data-testid="view-all-orders"
-            >
-              View All <ChevronRight className="w-4 h-4" />
-            </Link>
+        {/* Latest Plywood Orders */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="latest-plywood-orders">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-orange-50">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-orange-600" />
+              <h2 className="font-semibold text-slate-900">Plywood Orders</h2>
+            </div>
+            <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-lg text-xs font-medium">
+              {dashboardData?.plywood_orders_count || 0}
+            </span>
           </div>
-          <div className="divide-y divide-slate-100">
-            {orders.slice(0, 5).map((order) => (
+          <div className="divide-y divide-slate-100 max-h-80 overflow-auto">
+            {(dashboardData?.latest_plywood_orders || []).slice(0, 5).map((order: any) => (
               <Link
                 key={order.id}
                 to={`/order/${order.id}`}
-                className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-                data-testid={`order-row-${order.id}`}
+                className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-                    <Package className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-900">{order.id}</p>
-                    <p className="text-sm text-slate-500">{order.customerName || "Customer"}</p>
-                  </div>
+                <div>
+                  <p className="font-medium text-slate-900 text-sm">{order.id}</p>
+                  <p className="text-xs text-slate-500">{order.customerName}</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right hidden sm:block">
-                    <p className="font-semibold text-slate-900">₹{Number(order.amount || order.grand_total || 0).toLocaleString()}</p>
-                    <p className="text-xs text-slate-400">
-                      {new Date(order.order_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
+                <div className="text-right">
+                  <p className="font-semibold text-slate-900 text-sm">₹{Number(order.grand_total || 0).toLocaleString()}</p>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    order.status === 'Pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
                     {order.status}
                   </span>
                 </div>
               </Link>
             ))}
-            {orders.length === 0 && (
-              <div className="px-6 py-12 text-center">
-                <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">No orders available</p>
+            {(!dashboardData?.latest_plywood_orders || dashboardData.latest_plywood_orders.length === 0) && (
+              <div className="px-6 py-8 text-center">
+                <p className="text-slate-400 text-sm">No plywood orders</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Latest Timber Orders */}
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="latest-timber-orders">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
+            <div className="flex items-center gap-2">
+              <TreePine className="w-5 h-5 text-emerald-600" />
+              <h2 className="font-semibold text-slate-900">Timber Orders</h2>
+            </div>
+            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium">
+              {dashboardData?.timber_orders_count || 0}
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100 max-h-80 overflow-auto">
+            {(dashboardData?.latest_timber_orders || []).slice(0, 5).map((order: any) => (
+              <Link
+                key={order.id}
+                to={`/order/${order.id}`}
+                className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
+              >
+                <div>
+                  <p className="font-medium text-slate-900 text-sm">{order.id}</p>
+                  <p className="text-xs text-slate-500">{order.customerName}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-slate-900 text-sm">₹{Number(order.grand_total || 0).toLocaleString()}</p>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    order.status === 'Pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {order.status}
+                  </span>
+                </div>
+              </Link>
+            ))}
+            {(!dashboardData?.latest_timber_orders || dashboardData.latest_timber_orders.length === 0) && (
+              <div className="px-6 py-8 text-center">
+                <p className="text-slate-400 text-sm">No timber orders</p>
               </div>
             )}
           </div>
@@ -210,6 +243,22 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl border border-slate-200 p-6" data-testid="quick-actions">
             <h2 className="font-semibold text-slate-900 mb-4">Quick Actions</h2>
             <div className="space-y-3">
+              {dashboardData?.pending_customers > 0 && (
+                <Link
+                  to="/customers?status=pending"
+                  className="flex items-center gap-4 p-4 bg-amber-50 rounded-xl hover:bg-amber-100 transition-colors group border border-amber-200"
+                  data-testid="quick-action-pending-customers"
+                >
+                  <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-900">Pending Approvals</p>
+                    <p className="text-xs text-amber-600 font-medium">{dashboardData.pending_customers} customers waiting</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-amber-400" />
+                </Link>
+              )}
               <Link
                 to="/customers"
                 className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors group"
@@ -220,7 +269,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-slate-900">Manage Customers</p>
-                  <p className="text-xs text-slate-500">Approve pending customers</p>
+                  <p className="text-xs text-slate-500">{dashboardData?.total_customers || 0} active</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400" />
               </Link>
@@ -235,7 +284,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-slate-900">Process Orders</p>
-                  <p className="text-xs text-slate-500">Update order statuses</p>
+                  <p className="text-xs text-slate-500">{dashboardData?.pending_orders || 0} pending</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400" />
               </Link>
@@ -250,41 +299,10 @@ export default function Dashboard() {
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-slate-900">Manage Invoices</p>
-                  <p className="text-xs text-slate-500">Mark invoices as paid</p>
+                  <p className="text-xs text-slate-500">{dashboardData?.pending_invoices || 0} pending</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400" />
               </Link>
-            </div>
-          </div>
-
-          {/* Order Status Summary */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6" data-testid="order-status-summary">
-            <h2 className="font-semibold text-slate-900 mb-4">Order Status</h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">Pending</span>
-                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium">
-                  {summary.pendingApproval}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">Invoiced</span>
-                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
-                  {summary.invoiced}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">Dispatched</span>
-                <span className="px-2 py-1 bg-cyan-100 text-cyan-700 rounded-lg text-xs font-medium">
-                  {summary.dispatched}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">Completed</span>
-                <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium">
-                  {summary.completed}
-                </span>
-              </div>
             </div>
           </div>
         </div>

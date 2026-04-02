@@ -327,7 +327,8 @@ export const apiService = {
   },
 
   async getAdminDashboard() {
-    return request(`${API_BASE}/admin?resource=dashboard`);
+    // Use V2 dashboard for new Plywood/Timber data
+    return request(`${API_BASE}/admin/dashboard/v2`);
   },
 
   // Health
