@@ -1,188 +1,95 @@
 # Natural Plylam B2B Ordering System - PRD
 
 ## Original Problem Statement
-Transform the application into a **B2B Plywood/Timber direct ordering system** with:
-1. Single-screen fast ordering with cascading dropdowns
-2. 6 pricing tiers based on customer type
-3. Strict stock validation by product + thickness + size
-4. Split billing (separate Plywood and Timber bills)
-5. Photo order upload option
-6. Order editable until admin confirms
-7. Admin dashboard with separate Plywood/Timber sections
-8. PDF generation for invoices
+Transform the application into a direct B2B Plywood/Timber ordering system with:
+1. Single-Screen Fast Ordering: Product Group, Product, Thickness, Size, Quantity with cascading dropdowns
+2. Pricing Logic: 6 pricing tiers (Standard, Dealer, Wholesale, Premium, VIP, Enterprise)
+3. Stock Logic: Strict validation based on (Product + Thickness + Size)
+4. Billing Logic: Split billing - single order splits into Plywood and Timber bills
+5. Photo Order: Upload photo as reference order
+6. Order State: Editable until Admin confirms
+7. Sales Team: Select customer and place orders on their behalf
+8. Admin Dashboard: Split tables for Plywood/Timber with filters
 
 ## Architecture
-- **Admin Frontend**: React 19 + TypeScript + Vite + Tailwind CSS (port 3000)
-- **Customer Portal**: `/portal/` - B2B ordering interface
-- **Sales Portal**: `/sales/` - Sales team interface
-- **Standalone Admin App**: `/app/admin-app-standalone/`
-- **Backend**: FastAPI (Python) with MongoDB
-- **Authentication**: JWT-based with role-based access
 
-## Implemented Features (March 30 - April 2, 2026)
+### Services
+- **Backend**: FastAPI on port 8001 (`/app/backend/server.py`)
+- **Frontend Admin**: React/Vite on port 3000 (`/app/frontend`)
+- **Customer Portal**: React/Vite (`/app/customer-portal`)
+- **Sales Portal**: React/Vite (`/app/sales-portal`)
+- **Database**: MongoDB
 
-### B2B Ordering System
-- **Fast Order Page**: Horizontal row-based layout
-  - **Searchable product dropdown** - Type to filter products
-  - Auto-cascading dropdowns (Product → Thickness → Size)
-  - **Auto-select last ordered product** on page load
-  - **Copy product on "+ Add Product"**
-  - **Transport Details Popup** - Self Pickup/Delivery, Vehicle Number, Driver details
-  - Multiple products per order
-  - "Upload Invoice / Photo Order" option
-  - Bottom summary: Total Qty | Total Amount
+### Key Data Models
+- `users`: {email, role, pricing_type (1-6), mpin, phone}
+- `products_v2`: {product_group, name, thickness, size, stock, pricing_tiers: {1-6}}
+- `orders_v2`: {items, status, photo_url, order_type (Plywood/Timber), transport_details}
+- `invoices_v2`: {order_id, items, amount, order_type}
+- `customers`: {pricing_tier (1-6), approval_status, business_name}
 
-- **Product Catalog Page**: Browse products like e-commerce
-  - All/Plywood/Timber filter tabs
-  - Shows: Name, Price, Description, Thickness options, Size options
-  - "Order Now" button links to order page with product pre-selected
+### Key API Endpoints
+- `POST /api/orders/direct` - Create split billing order
+- `GET /api/orders/v2` - List orders with filters
+- `POST /api/orders/v2/{id}/confirm` - Confirm order, create invoice
+- `POST /api/orders/v2/{id}/cancel` - Cancel order
+- `GET /api/invoices/v2` - List invoices with type filters
+- `GET /api/products-v2` - Cascading product variants
+- `GET /api/sales/customers` - Customers for sales portal
+- `POST /api/sales/customers` - Create customer (auto-approved)
 
-- **Split Billing**: One order with mixed items creates separate bills
-  - Plywood items → Plywood order + Plywood invoice
-  - Timber items → Timber order + Timber invoice
-  - Invoices created immediately when order is placed
+## Implementation Status
 
-- **6 Pricing Tiers**: Customer pricing based on tier (1-6)
-  - Tier 1 = Highest price, Tier 6 = Lowest price
-  - Price auto-calculated based on customer's tier
+### Completed Features (April 2, 2026)
 
-- **Stock Management**: Stock tracked by product + thickness + size
-- **Order Edit/Lock**: Orders editable until admin confirms
-
-### Admin Features
-- **Dashboard with Plywood/Timber sections**: Separate latest orders lists
-- **Pending on Top**: Orders and customers sorted with pending first
-- **Admin Price Edit**: Can modify order prices before approval
-- **Admin Customer Creation**: Can add new customers (auto-approved)
-- **Product/Client Analytics**: Sales by product, sales by customer
-
-### MPIN Quick Login
-- Set 4-6 digit MPIN in Profile
-- Login with Phone + MPIN
-
-### Banner System
-- Admin can create/edit/delete banners
-- Banners displayed on customer homepage
-
-### Sales Portal
-- Same order process as customer
-- Customers created by sales are auto-approved
-
-### Backend V2 APIs
-- `GET /api/product-groups` - Plywood/Timber groups
-- `GET /api/products-v2` - Products with variants
-- `GET /api/products-v2/{id}/stock` - Stock by variant
-- `GET /api/stock/check` - Stock availability check
-- `GET /api/price/calculate` - Price calculation by tier
-- `POST /api/orders/direct` - Create order (auto-splits)
-- `GET /api/orders/v2` - Orders with filters (type, status)
-- `PUT /api/orders/v2/{id}` - Update order items
-- `POST /api/orders/v2/{id}/confirm` - Confirm order (admin)
-- `GET /api/invoices/v2` - Invoices with filters
-- `GET /api/invoices/v2/{id}/pdf` - HTML invoice for printing
-- `GET /api/admin/dashboard/v2` - Dashboard with split sections
-
-### Role-Based Access Control
-- **Super Admin**: Full access + Staff Management
-- **Admin (Worker)**: Orders, Products, Customers (view-only)
-- **Sales Person**: Place orders for assigned customers
-- **Customer**: B2B ordering with tier pricing
-
-## Data Models
-
-### products_v2
-```json
-{
-  "id": "MDF-PP",
-  "name": "MDF PP Plain",
-  "group": "Plywood",
-  "thicknesses": ["3", "5.5", "11", "18"],
-  "sizes": ["2.44 x 1.22", "3.05 x 1.22"],
-  "pricing_tiers": {"1": 417.45, "2": 400, "3": 385, "4": 370, "5": 355, "6": 340}
-}
-```
-
-### orders_v2
-```json
-{
-  "id": "ORD-XXXXXXXX",
-  "customer_id": 1,
-  "order_type": "Plywood|Timber",
-  "status": "Pending|Confirmed|Dispatched|Completed|Cancelled",
-  "items": [...],
-  "total_quantity": 10,
-  "sub_total": 4000,
-  "cgst": 360,
-  "sgst": 360,
-  "grand_total": 4720,
-  "pricing_tier": "2",
-  "is_editable": true
-}
-```
-
-### stock
-```json
-{
-  "stock_key": "MDF-PP_11_2.44X1.22",
-  "product_id": "MDF-PP",
-  "thickness": "11",
-  "size": "2.44 x 1.22",
-  "quantity": 100,
-  "reserved": 0
-}
-```
-
-## URLs
-- **Admin Panel**: https://admin-panel-refactor-7.preview.emergentagent.com/
-- **Customer Portal**: https://admin-panel-refactor-7.preview.emergentagent.com/portal/
-- **Sales Portal**: https://admin-panel-refactor-7.preview.emergentagent.com/sales/
-
-## Test Credentials
-- **Super Admin**: admin@naturalplylam.com / admin123
-- **Worker Admin**: worker@naturalplylam.com / worker123
-- **Customer (Tier 2)**: customer1@example.com / customer123
-
-## Files Modified/Created
-
-### Backend
-- `/app/backend/server.py`: Complete V2 API implementation
-
-### Customer Portal
-- `/app/customer-portal/src/pages/FastOrder.tsx`: NEW - Horizontal order layout
-- `/app/customer-portal/src/pages/Dashboard.tsx`: Updated with Plywood/Timber stats
-- `/app/customer-portal/src/pages/Orders.tsx`: Updated with type filter
-- `/app/customer-portal/src/pages/Invoices.tsx`: Updated with type filter
-- `/app/customer-portal/src/components/Layout.tsx`: Updated navigation
-- `/app/customer-portal/src/App.tsx`: Updated routes
-
-## Prioritized Backlog
-
-### P0 (Critical) - COMPLETED
-- [x] B2B Fast Order Page (cascading dropdowns)
-- [x] Split billing (Plywood/Timber)
-- [x] 6 pricing tiers
-- [x] Stock validation
-- [x] Order edit/lock
+#### Customer Portal
+- [x] FastOrder single-screen with cascading dropdowns (Product → Thickness → Size)
+- [x] Searchable product dropdowns
+- [x] MPIN Login
+- [x] Dynamic banners on homepage
+- [x] Product catalog with search
 - [x] Photo order upload
+- [x] Transport details modal
 
-### P1 (High) - PENDING
-- [ ] Admin Dashboard UI update for V2 (separate Plywood/Timber sections)
-- [ ] Sales Portal update for V2 APIs
-- [ ] Order confirmation flow (admin clicks "Confirm" → locks order → creates invoice)
-- [ ] Real PDF generation (currently HTML-based print)
+#### Admin Panel
+- [x] Orders V2 page with Plywood/Timber type filters
+- [x] Confirm/Cancel buttons for pending orders
+- [x] Status filters (Pending, Confirmed, Dispatched, Completed, Cancelled)
+- [x] Order detail modal view
+- [x] 6-tier pricing in Customer create/edit forms
+- [x] Invoices V2 page with Plywood/Timber type filters
+- [x] Invoice detail page with embedded items
+- [x] Mark as Paid/Overdue quick actions
 
-### P2 (Medium)
-- [ ] Customer/Product import from CSV
-- [ ] Email notifications on order status change
-- [ ] Reports/analytics dashboard
+#### Sales Portal
+- [x] FastOrder flow with customer selection first
+- [x] Add Customer with 6-tier pricing (auto-approved)
+- [x] Updated navigation (removed old Cart)
+- [x] Dashboard with Create Order link
 
-### P3 (Low)
-- [ ] Dark mode
-- [ ] Bulk order upload
-- [ ] Audit log for actions
+#### Backend
+- [x] Split billing logic (Plywood/Timber separation)
+- [x] 6-tier pricing support
+- [x] Order confirmation creates invoice
+- [x] Stock validation per variant
+- [x] Sales customer creation endpoint
 
-## Next Tasks
-1. Update Admin Dashboard UI to show V2 orders (Plywood/Timber sections)
-2. Add order confirmation button in admin
-3. Update Sales Portal for V2 APIs
-4. Implement proper PDF generation using reportlab
+### Test Credentials
+- Super Admin: admin@naturalplylam.com / admin123
+- Worker Admin: worker@naturalplylam.com / worker123
+- Sales Person: sales@naturalplylam.com / sales123
+- Customer (Tier 2): customer1@example.com / customer123 (MPIN: 1234, Phone: 9876543212)
+
+## Backlog (P1/P2)
+
+### P1 - Important
+- [ ] Admin Banner Management UI (backend done, needs Super Admin UI)
+- [ ] Transport details validation (mandatory when delivery selected)
+
+### P2 - Future
+- [ ] PDF generation with reportlab for invoices
+- [ ] CSV import for customers/products
+- [ ] Order edit functionality (before confirmation)
+- [ ] Product stock bulk update UI
+
+## Test Reports
+- Latest: `/app/test_reports/iteration_7.json` - 100% pass rate (21/21 backend, all frontend)
