@@ -16,97 +16,95 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 ### Services
 - **Backend**: FastAPI on port 8001 (`/app/backend/server.py`)
 - **Frontend Admin**: React/Vite on port 3000 (`/app/frontend`)
-- **Customer Portal**: React/Vite (`/app/customer-portal`)
-- **Sales Portal**: React/Vite (`/app/sales-portal`)
+- **Customer Portal**: React/Vite (`/app/customer-portal`) - served from `/portal` routes
+- **Sales Portal**: React/Vite (`/app/sales-portal`) - served from `/sales` routes
 - **Database**: MongoDB
 
 ### Key Data Models
 - `users`: {email, role, pricing_type (1-6), mpin, phone}
-- `products_v2`: {product_group, name, thickness, size, stock, pricing_tiers: {1-6}}
-- `orders_v2`: {items, status, photo_url, order_type (Plywood/Timber), transport_details}
-- `invoices_v2`: {order_id, items, amount, order_type}
+- `products_v2`: {product_group, name, thicknesses[], sizes[], pricing_tiers: {1-6}}
+- `orders_v2`: {items, status, photo_url, order_type (Plywood/Timber), transport_details, grand_total}
+- `invoices_v2`: {order_id, items, amount, order_type} - **ONLY for Timber orders**
 - `stock`: {stock_key, product_id, thickness, size, quantity, variant_prices}
 - `customers`: {pricing_tier (1-6), approval_status, business_name}
 
 ### Key API Endpoints
-- `POST /api/orders/direct` - Create split billing order
-- `GET /api/orders/v2` - List orders with filters
+- `POST /api/orders/direct` - Create split billing order (NO GST)
+- `GET /api/orders/v2` - List orders with filters (date_from, date_to, product_name)
 - `PUT /api/orders/v2/{id}/items` - Admin edit item prices before approval
-- `POST /api/orders/v2/{id}/confirm` - Approve order, create invoice
+- `POST /api/orders/v2/{id}/confirm` - Approve order, create invoice (ONLY for Timber)
 - `POST /api/orders/v2/{id}/cancel` - Cancel order
 - `PUT /api/orders/v2/{id}/status` - Update order status (Delivered)
-- `GET /api/invoices/v2` - List invoices with type filters
+- `GET /api/invoices/v2` - List invoices with type filters (start_date, end_date)
 - `GET /api/products-v2` - Cascading product variants
-- `POST /api/admin/products-v2` - Create product with variants
+- `POST /api/admin/products-v2` - Create product with dynamic variants
 - `GET /api/admin/products-v2/template` - Download Excel template
 - `POST /api/admin/products-v2/import` - Import products from Excel
 - `GET /api/admin/products-v2/export` - Export products to Excel
-- `GET /api/sales/customers` - Customers for sales portal
-- `POST /api/sales/customers` - Create customer (auto-approved)
 
 ## Implementation Status
 
-### Completed Features (April 2, 2026)
+### Completed Features (April 5, 2026) - 17-Point UI/UX Overhaul
+
+#### Critical Business Logic Changes
+- [x] **GST REMOVED** - No CGST/SGST calculations anywhere
+- [x] **Plywood orders do NOT generate invoices** - Use "Estimated" pricing only
+- [x] **Status renamed**: "Pending" → "Order Placed" (in UI only, DB still stores "Pending")
+- [x] **Simplified statuses**: Order Placed → Approved → Delivered / Cancelled
 
 #### Customer Portal
-- [x] FastOrder single-screen with cascading dropdowns (Product → Thickness → Size)
-- [x] Searchable product dropdowns
-- [x] MPIN Login
-- [x] Dynamic banners on homepage
-- [x] Product catalog with search
-- [x] Photo order upload
-- [x] Transport details modal with **MANDATORY fields**
-- [x] **Quantity dropdown** with preset values (1,2,3,5,10,20,50,100) + custom option
-- [x] **Simplified order statuses**: Order Placed → Approved → Delivered / Cancelled
+- [x] Dashboard: Removed "Total Spend" section
+- [x] Dashboard: Plywood/Timber blocks are **clickable** - navigate to filtered order history
+- [x] Order History: "Order Placed" status display (yellow badge)
+- [x] Order History: **"Estimated" vs "Total"** labels - Plywood shows "Estimated", Timber shows "Total"
+- [x] Order History: **Date filters** (From/To) and **Item/Product filter**
+- [x] Invoices: Info banner "Invoices are generated for Timber orders only"
+- [x] Invoices: Only shows Timber invoices (no Plywood filter option)
+- [x] Order Detail: "Estimated Total" label for Plywood with info text
+- [x] Order Detail: **No "Download Invoice" button** for Plywood orders
+- [x] FastOrder: Two top-level buttons (PLYWOOD / TIMBER)
+- [x] FastOrder: Manual quantity input (no dropdown)
+- [x] FastOrder: Auto-expand product rows when filled
+- [x] FastOrder: Transport fields **NOT mandatory** for self-pickup
 
 #### Admin Panel
-- [x] Orders V2 page with Plywood/Timber type filters
-- [x] **Edit button** to modify item prices/quantities before approval
-- [x] Approve/Cancel buttons for pending orders
-- [x] **Simplified status filters**: Order Placed, Approved, Delivered, Cancelled
-- [x] Order detail modal view with full breakdown
-- [x] 6-tier pricing in Customer create/edit forms
-- [x] Invoices V2 page with Plywood/Timber type filters
-- [x] Invoice detail page with embedded items
-- [x] **Products V2** with variant management (thickness × size × tier pricing)
-- [x] **Excel template download** for product import
-- [x] **Excel upload** for bulk product import
-- [x] **Excel export** of all products
+- [x] Orders V2: "Order Placed" status filter (maps to "Pending" in DB)
+- [x] Orders V2: Edit modal shows **NO GST** - only Sub Total and Estimated/Total
+- [x] Orders V2: "Estimated Total" label for Plywood orders
+- [x] Products V2: **Dynamic thickness/size inputs** - no hardcoded dropdowns
+- [x] Products V2: Text input fields with placeholders (e.g., "12 or 18.5", "8x4 or 2.44x1.22")
 
 #### Sales Portal
-- [x] FastOrder flow with customer selection first
-- [x] Add Customer with 6-tier pricing (auto-approved)
-- [x] Updated navigation (New Order highlighted)
-- [x] **Quantity dropdown** with preset values
-- [x] **Mandatory transport fields**
+- [x] FastOrder: Customer selection screen first
+- [x] FastOrder: **PLYWOOD / TIMBER** toggle buttons at top
+- [x] FastOrder: Manual quantity input
+- [x] FastOrder: "Estimated:" label in summary for Plywood
+- [x] FastOrder: Transport fields **NOT mandatory** for self-pickup
 
 #### Backend
-- [x] Split billing logic (Plywood/Timber separation)
-- [x] 6-tier pricing support
-- [x] Order confirmation creates invoice
-- [x] Stock validation per variant
-- [x] **Order items price editing** endpoint
-- [x] **Excel import/export** with openpyxl + pandas
-- [x] **Simplified statuses**: Pending, Approved, Delivered, Cancelled
+- [x] GST removed from all calculations
+- [x] Invoice creation **skipped for Plywood orders**
+- [x] Date filters added to orders/invoices endpoints (start_date, end_date)
+- [x] Product name filter added to orders endpoint (product_name)
 
 ### Test Credentials
 - Super Admin: admin@naturalplylam.com / admin123
-- Worker Admin: worker@naturalplylam.com / worker123
 - Sales Person: sales@naturalplylam.com / sales123
-- Customer (Tier 2): customer1@example.com / customer123 (MPIN: 1234, Phone: 9876543212)
+- Customer (Tier 2): customer1@example.com / customer123 (MPIN: 1234)
 
-## Backlog (P1/P2)
+## Backlog
 
-### P1 - Important
-- [ ] Admin Banner Management UI (backend done, needs Super Admin UI)
-- [ ] Update delivered orders status from admin
+### P1 - In Progress
+- [ ] **WhatsApp sharing** for invoices in Sales Portal
+- [ ] **PDF generation** with reportlab for invoice download/share
 
 ### P2 - Future
-- [ ] PDF generation with reportlab for invoices
+- [ ] Admin Banner Management UI (backend done, needs Super Admin UI)
+- [ ] Sales Portal: Filter invoices to show only their assigned customers' invoices
 - [ ] CSV import for customers
-- [ ] Order edit functionality (before approval) from customer portal
 - [ ] Product stock bulk update UI
-- [ ] Analytics dashboard with filters
+- [ ] Analytics dashboard with date/item filters
 
 ## Test Reports
-- Latest: `/app/test_reports/iteration_8.json` - 100% pass rate (18/18 backend, all frontend verified)
+- Latest: `/app/test_reports/iteration_9.json` - 98% pass rate (all major features verified)
+- Previous: `/app/test_reports/iteration_8.json` - 100% pass rate
