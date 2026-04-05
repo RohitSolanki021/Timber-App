@@ -1136,7 +1136,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         "driver_phone": order.driver_phone
     }
     
-    # Helper function to create invoice for an order
+    # Helper function to create invoice for an order (ONLY for Timber)
     def create_invoice_for_order(order_data: dict) -> dict:
         invoice_id = f"INV-{secrets.token_hex(4).upper()}"
         invoice = {
@@ -1147,9 +1147,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
             "order_type": order_data["order_type"],
             "items": order_data["items"],
             "sub_total": order_data["sub_total"],
-            "cgst": order_data["cgst"],
-            "sgst": order_data["sgst"],
-            "grand_total": order_data["grand_total"],
+            "grand_total": order_data["grand_total"],  # No GST
             "pricing_tier": order_data["pricing_tier"],
             "status": "Pending",
             "issue_date": current_time,
@@ -1160,7 +1158,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         db.invoices_v2.insert_one(invoice)
         return {"id": invoice_id, "type": order_data["order_type"], "total": order_data["grand_total"]}
     
-    # Create Plywood order if items exist
+    # Create Plywood order if items exist (NO INVOICE for Plywood - only estimated rate)
     if plywood_items:
         plywood_total = sum(item["total_price"] for item in plywood_items)
         plywood_qty = sum(item["quantity"] for item in plywood_items)
@@ -1174,9 +1172,8 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
             "items": plywood_items,
             "total_quantity": plywood_qty,
             "sub_total": plywood_total,
-            "cgst": round(plywood_total * 0.09, 2),
-            "sgst": round(plywood_total * 0.09, 2),
-            "grand_total": round(plywood_total * 1.18, 2),
+            "estimated_total": plywood_total,  # No GST for Plywood
+            "grand_total": plywood_total,  # Same as estimated (no GST)
             "pricing_tier": pricing_tier,
             "photo_reference": order.photo_reference,
             "notes": order.notes,
@@ -1186,16 +1183,14 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
             "order_date": current_time,
             "created_at": current_time,
             "updated_at": current_time,
-            "is_editable": True
+            "is_editable": True,
+            "is_estimated": True  # Flag for estimated pricing
         }
         db.orders_v2.insert_one(plywood_order)
-        orders_created.append({"id": plywood_order["id"], "type": "Plywood", "total": plywood_order["grand_total"]})
-        
-        # Create invoice for plywood order
-        inv = create_invoice_for_order(plywood_order)
-        invoices_created.append(inv)
+        orders_created.append({"id": plywood_order["id"], "type": "Plywood", "total": plywood_order["estimated_total"], "is_estimated": True})
+        # NO INVOICE created for Plywood orders
     
-    # Create Timber order if items exist
+    # Create Timber order if items exist (WITH INVOICE)
     if timber_items:
         timber_total = sum(item["total_price"] for item in timber_items)
         timber_qty = sum(item["quantity"] for item in timber_items)
@@ -1209,9 +1204,7 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
             "items": timber_items,
             "total_quantity": timber_qty,
             "sub_total": timber_total,
-            "cgst": round(timber_total * 0.09, 2),
-            "sgst": round(timber_total * 0.09, 2),
-            "grand_total": round(timber_total * 1.18, 2),
+            "grand_total": timber_total,  # No GST
             "pricing_tier": pricing_tier,
             "photo_reference": order.photo_reference,
             "notes": order.notes,
@@ -1248,6 +1241,9 @@ async def get_orders_v2(
     status: Optional[str] = None,
     customer_id: Optional[int] = None,
     search: Optional[str] = None,
+    product_name: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     pending_first: bool = True,
     payload: dict = Depends(verify_token)
 ):
@@ -1275,6 +1271,19 @@ async def get_orders_v2(
             {"id": {"$regex": search, "$options": "i"}},
             {"customerName": {"$regex": search, "$options": "i"}}
         ]
+    
+    # Product/Item name filter
+    if product_name:
+        query["items.product_name"] = {"$regex": product_name, "$options": "i"}
+    
+    # Date range filter
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
     
     total = db.orders_v2.count_documents(query)
     skip = (page - 1) * per_page
@@ -1529,7 +1538,7 @@ async def admin_update_order_items(order_id: str, body: AdminOrderItemsUpdate, p
 
 @app.post("/api/orders/v2/{order_id}/confirm")
 async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token)):
-    """Admin confirms an order - locks it and deducts stock"""
+    """Admin confirms an order - locks it and deducts stock. Creates invoice ONLY for Timber."""
     role = payload.get("role", "").lower()
     if role not in ["super admin", "admin", "manager"]:
         raise HTTPException(status_code=403, detail="Only admin can confirm orders")
@@ -1561,17 +1570,28 @@ async def confirm_order_v2(order_id: str, payload: dict = Depends(verify_token))
         }}
     )
     
-    # Update invoice status (invoice created when order placed)
-    db.invoices_v2.update_one(
-        {"order_id": order_id},
-        {"$set": {
-            "status": "Approved",
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }}
-    )
+    invoice_id = None
     
-    invoice = db.invoices_v2.find_one({"order_id": order_id}, {"_id": 0})
-    invoice_id = invoice.get("id") if invoice else None
+    # Create invoice ONLY for Timber orders (Plywood has estimated rate only)
+    if order.get("order_type") == "Timber":
+        invoice_id = f"INV-{secrets.token_hex(4).upper()}"
+        invoice = {
+            "id": invoice_id,
+            "order_id": order_id,
+            "customer_id": order["customer_id"],
+            "customerName": order.get("customerName"),
+            "order_type": "Timber",
+            "items": order["items"],
+            "sub_total": order["sub_total"],
+            "grand_total": order["grand_total"],  # No GST
+            "pricing_tier": order.get("pricing_tier"),
+            "status": "Pending",
+            "issue_date": datetime.now(timezone.utc).isoformat(),
+            "due_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        db.invoices_v2.insert_one(invoice)
     
     return {"success": True, "message": "Order confirmed", "invoice_id": invoice_id}
 
@@ -1656,23 +1676,42 @@ async def get_invoices_v2(
     order_type: Optional[str] = None,
     status: Optional[str] = None,
     customer_id: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    """Get invoices with filters"""
-    query = {}
+    """Get invoices with filters - Only Timber invoices (Plywood has no invoice)"""
+    query = {"order_type": "Timber"}  # Only Timber invoices
     
     user_id = payload.get("user_id")
+    role = payload.get("role", "").lower()
+    
     if user_id.startswith("customer_"):
         cust_id = int(user_id.replace("customer_", ""))
         query["customer_id"] = cust_id
     elif customer_id:
         query["customer_id"] = customer_id
     
-    if order_type and order_type != "all":
-        query["order_type"] = order_type
+    # Sales person can only see their customers' invoices
+    if role == "sales person":
+        sales_user = db.users.find_one({"email": user_id})
+        if sales_user:
+            sales_customers = list(db.customers.find({"sales_person_id": str(sales_user.get("_id", ""))}, {"id": 1}))
+            customer_ids = [c["id"] for c in sales_customers]
+            if customer_ids:
+                query["customer_id"] = {"$in": customer_ids}
     
     if status and status != "all":
         query["status"] = status
+    
+    # Date range filter
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
     
     total = db.invoices_v2.count_documents(query)
     skip = (page - 1) * per_page
@@ -1702,11 +1741,12 @@ async def get_invoice_v2(invoice_id: str, payload: dict = Depends(verify_token))
 async def get_customer_invoices(
     page: int = 1,
     per_page: int = 10,
-    order_type: Optional[str] = None,
     status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    """Get invoices for the logged-in customer"""
+    """Get invoices for the logged-in customer - ONLY Timber (no Plywood invoices)"""
     user_id = payload.get("user_id")
     
     # Extract customer ID from token
@@ -1718,12 +1758,19 @@ async def get_customer_invoices(
             raise HTTPException(status_code=404, detail="Customer not found")
         customer_id = customer["id"]
     
-    query = {"customer_id": customer_id}
+    query = {"customer_id": customer_id, "order_type": "Timber"}  # Only Timber invoices
     
-    if order_type and order_type != "all":
-        query["order_type"] = order_type
     if status and status != "all" and status != "All":
         query["status"] = status
+    
+    # Date range filter
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_query
     
     total = db.invoices_v2.count_documents(query)
     skip = (page - 1) * per_page
