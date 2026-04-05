@@ -1067,7 +1067,7 @@ async def export_products_to_excel(payload: dict = Depends(verify_token)):
 
 @app.post("/api/orders/direct")
 async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(verify_token)):
-    """Create a direct order - splits into plywood and timber bills internally"""
+    """Create a direct order - single order can contain both plywood and timber items"""
     
     # Validate customer
     customer = db.customers.find_one({"id": order.customer_id})
@@ -1080,9 +1080,10 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
     # Get customer pricing tier
     pricing_tier = str(customer.get("pricing_tier", 1))
     
-    # Separate items by group
-    plywood_items = []
-    timber_items = []
+    # Process all items and apply correct pricing
+    processed_items = []
+    has_plywood = False
+    has_timber = False
     
     for item in order.items:
         # Verify stock availability
@@ -1106,14 +1107,21 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         else:
             item_dict = item.dict()
         
+        processed_items.append(item_dict)
+        
         if item.product_group.lower() == "plywood":
-            plywood_items.append(item_dict)
+            has_plywood = True
         else:
-            timber_items.append(item_dict)
+            has_timber = True
     
-    # Create orders
-    orders_created = []
-    invoices_created = []
+    # Determine order type
+    if has_plywood and has_timber:
+        order_type = "Mixed"
+    elif has_plywood:
+        order_type = "Plywood"
+    else:
+        order_type = "Timber"
+    
     current_time = datetime.now(timezone.utc).isoformat()
     
     # Get placer info
@@ -1136,100 +1144,42 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
         "driver_phone": order.driver_phone
     }
     
-    # Helper function to create invoice for an order (ONLY for Timber)
-    def create_invoice_for_order(order_data: dict) -> dict:
-        invoice_id = f"INV-{secrets.token_hex(4).upper()}"
-        invoice = {
-            "id": invoice_id,
-            "order_id": order_data["id"],
-            "customer_id": order_data["customer_id"],
-            "customerName": order_data["customerName"],
-            "order_type": order_data["order_type"],
-            "items": order_data["items"],
-            "sub_total": order_data["sub_total"],
-            "grand_total": order_data["grand_total"],  # No GST
-            "pricing_tier": order_data["pricing_tier"],
-            "status": "Pending",
-            "issue_date": current_time,
-            "due_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
-            "created_at": current_time,
-            "updated_at": current_time
-        }
-        db.invoices_v2.insert_one(invoice)
-        return {"id": invoice_id, "type": order_data["order_type"], "total": order_data["grand_total"]}
+    # Calculate totals
+    total_amount = sum(item["total_price"] for item in processed_items)
+    total_qty = sum(item["quantity"] for item in processed_items)
     
-    # Create Plywood order if items exist (NO INVOICE for Plywood - only estimated rate)
-    if plywood_items:
-        plywood_total = sum(item["total_price"] for item in plywood_items)
-        plywood_qty = sum(item["quantity"] for item in plywood_items)
-        
-        plywood_order = {
-            "id": generate_order_id(),
-            "customer_id": order.customer_id,
-            "customerName": customer.get("name"),
-            "order_type": "Plywood",
-            "status": "Pending",  # Pending admin confirmation
-            "items": plywood_items,
-            "total_quantity": plywood_qty,
-            "sub_total": plywood_total,
-            "estimated_total": plywood_total,  # No GST for Plywood
-            "grand_total": plywood_total,  # Same as estimated (no GST)
-            "pricing_tier": pricing_tier,
-            "photo_reference": order.photo_reference,
-            "notes": order.notes,
-            "placed_by": placer_name,
-            "placed_by_role": placer_role,
-            "transport": transport_info,
-            "order_date": current_time,
-            "created_at": current_time,
-            "updated_at": current_time,
-            "is_editable": True,
-            "is_estimated": True  # Flag for estimated pricing
-        }
-        db.orders_v2.insert_one(plywood_order)
-        orders_created.append({"id": plywood_order["id"], "type": "Plywood", "total": plywood_order["estimated_total"], "is_estimated": True})
-        # NO INVOICE created for Plywood orders
+    # Create single unified order
+    unified_order = {
+        "id": generate_order_id(),
+        "customer_id": order.customer_id,
+        "customerName": customer.get("name"),
+        "order_type": order_type,
+        "status": "Pending",
+        "items": processed_items,
+        "total_quantity": total_qty,
+        "sub_total": total_amount,
+        "grand_total": total_amount,
+        "pricing_tier": pricing_tier,
+        "photo_reference": order.photo_reference,
+        "notes": order.notes,
+        "placed_by": placer_name,
+        "placed_by_role": placer_role,
+        "transport": transport_info,
+        "order_date": current_time,
+        "created_at": current_time,
+        "updated_at": current_time,
+        "is_editable": True,
+        "has_plywood": has_plywood,
+        "has_timber": has_timber,
+        "is_estimated": has_plywood  # If has plywood, it's estimated
+    }
     
-    # Create Timber order if items exist (WITH INVOICE)
-    if timber_items:
-        timber_total = sum(item["total_price"] for item in timber_items)
-        timber_qty = sum(item["quantity"] for item in timber_items)
-        
-        timber_order = {
-            "id": generate_order_id(),
-            "customer_id": order.customer_id,
-            "customerName": customer.get("name"),
-            "order_type": "Timber",
-            "status": "Pending",
-            "items": timber_items,
-            "total_quantity": timber_qty,
-            "sub_total": timber_total,
-            "grand_total": timber_total,  # No GST
-            "pricing_tier": pricing_tier,
-            "photo_reference": order.photo_reference,
-            "notes": order.notes,
-            "placed_by": placer_name,
-            "placed_by_role": placer_role,
-            "transport": transport_info,
-            "order_date": current_time,
-            "created_at": current_time,
-            "updated_at": current_time,
-            "is_editable": True
-        }
-        db.orders_v2.insert_one(timber_order)
-        orders_created.append({"id": timber_order["id"], "type": "Timber", "total": timber_order["grand_total"]})
-        
-        # Create invoice for timber order
-        inv = create_invoice_for_order(timber_order)
-        invoices_created.append(inv)
-    
-    total_amount = sum(o["total"] for o in orders_created)
+    db.orders_v2.insert_one(unified_order)
     
     return {
         "success": True,
-        "message": f"Order placed successfully. {len(orders_created)} order(s) and {len(invoices_created)} invoice(s) created.",
-        "orders": orders_created,
-        "invoices": invoices_created,
+        "message": f"Order {unified_order['id']} placed successfully.",
+        "orders": [{"id": unified_order["id"], "type": order_type, "total": total_amount, "is_estimated": has_plywood}],
         "total_amount": total_amount
     }
 
