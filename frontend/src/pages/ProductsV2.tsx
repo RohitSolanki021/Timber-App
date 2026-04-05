@@ -40,8 +40,7 @@ const TIERS = [
   { num: 6, name: 'Enterprise' }
 ];
 
-const SIZES = ['8x4', '10x4', '6x4', '6x3'];
-const THICKNESSES = ['4', '6', '9', '12', '15', '18', '19', '25'];
+// No more hardcoded sizes/thicknesses - admin can input any value
 
 export default function ProductsV2() {
   const toast = useToast();
@@ -559,29 +558,23 @@ export default function ProductsV2() {
                     <div className="grid grid-cols-3 gap-3">
                       <div>
                         <label className="block text-xs text-slate-500 mb-1">Thickness (mm)</label>
-                        <select
+                        <input
+                          type="text"
                           value={variant.thickness}
                           onChange={(e) => updateVariant(index, 'thickness', e.target.value)}
+                          placeholder="e.g., 12 or 18.5"
                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
-                        >
-                          <option value="">Select</option>
-                          {THICKNESSES.map(t => (
-                            <option key={t} value={t}>{t}mm</option>
-                          ))}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-slate-500 mb-1">Size</label>
-                        <select
+                        <input
+                          type="text"
                           value={variant.size}
                           onChange={(e) => updateVariant(index, 'size', e.target.value)}
+                          placeholder="e.g., 8x4 or 2.44x1.22"
                           className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm"
-                        >
-                          <option value="">Select</option>
-                          {SIZES.map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
+                        />
                       </div>
                       <div>
                         <label className="block text-xs text-slate-500 mb-1">Stock Qty</label>

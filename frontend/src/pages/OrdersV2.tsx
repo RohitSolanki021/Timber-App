@@ -151,11 +151,9 @@ export default function OrdersV2() {
     }));
   };
 
-  // Calculate totals for edit modal
+  // Calculate totals for edit modal (NO GST)
   const editSubTotal = editItems.reduce((sum, item) => sum + item.total_price, 0);
-  const editCgst = editSubTotal * 0.09;
-  const editSgst = editSubTotal * 0.09;
-  const editGrandTotal = editSubTotal + editCgst + editSgst;
+  const editGrandTotal = editSubTotal;  // No GST anymore
 
   // Save edited order
   const handleSaveEdit = async () => {
@@ -624,19 +622,14 @@ export default function OrdersV2() {
                   <span className="text-slate-300">Sub Total</span>
                   <span>₹{editSubTotal.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-slate-300">CGST (9%)</span>
-                  <span>₹{editCgst.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-slate-300">SGST (9%)</span>
-                  <span>₹{editSgst.toLocaleString()}</span>
-                </div>
                 <div className="h-px bg-slate-700 my-3"></div>
                 <div className="flex justify-between text-lg font-bold">
-                  <span>Grand Total</span>
+                  <span>{editOrder?.order_type === 'Plywood' ? 'Estimated Total' : 'Total'}</span>
                   <span>₹{editGrandTotal.toLocaleString()}</span>
                 </div>
+                {editOrder?.order_type === 'Plywood' && (
+                  <p className="text-xs text-orange-300 mt-2">* Final price confirmed after admin approval</p>
+                )}
               </div>
               
               {/* Actions */}
@@ -762,19 +755,14 @@ export default function OrdersV2() {
                   <span className="text-slate-300">Sub Total</span>
                   <span>₹{Number(selectedOrder.sub_total).toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-slate-300">CGST (9%)</span>
-                  <span>₹{Number(selectedOrder.cgst).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-slate-300">SGST (9%)</span>
-                  <span>₹{Number(selectedOrder.sgst).toLocaleString()}</span>
-                </div>
                 <div className="h-px bg-slate-700 my-3"></div>
                 <div className="flex justify-between text-lg font-bold">
-                  <span>Grand Total</span>
+                  <span>{selectedOrder.order_type === 'Plywood' ? 'Estimated Total' : 'Total'}</span>
                   <span>₹{Number(selectedOrder.grand_total).toLocaleString()}</span>
                 </div>
+                {selectedOrder.order_type === 'Plywood' && (
+                  <p className="text-xs text-orange-300 mt-2">* Plywood orders use estimated pricing</p>
+                )}
               </div>
               
               {/* Actions */}
