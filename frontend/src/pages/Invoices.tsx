@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Invoice, Pagination } from "../types";
-import { FileText, ChevronRight, ChevronLeft, Search, Calendar, CheckCircle2, Clock, Package, TreePine } from "lucide-react";
+import { FileText, ChevronRight, ChevronLeft, Search, Calendar, CheckCircle2, Clock, Package, TreePine, Filter } from "lucide-react";
 import { apiProxy } from "../apiProxy";
 
 const INVOICES_PER_PAGE = 10;
@@ -14,6 +14,10 @@ export default function Invoices() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -25,6 +29,9 @@ export default function Invoices() {
         };
         if (typeFilter !== 'all') params.order_type = typeFilter;
         if (statusFilter !== 'All') params.status = statusFilter;
+        if (dateFrom) params.start_date = dateFrom;
+        if (dateTo) params.end_date = dateTo;
+        if (customerFilter.trim()) params.customer_name = customerFilter.trim();
         
         const response = await apiProxy.getInvoices(params);
         setInvoices(response.data);
@@ -36,7 +43,7 @@ export default function Invoices() {
       }
     };
     fetchInvoices();
-  }, [page, typeFilter, statusFilter]);
+  }, [page, typeFilter, statusFilter, dateFrom, dateTo, customerFilter]);
 
   const currentPage = pagination?.page ?? page;
   const totalPages = Math.max(1, pagination?.total_pages ?? page);
@@ -115,7 +122,64 @@ export default function Invoices() {
               </button>
             ))}
           </div>
+
+          {/* More Filters Toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              showFilters || dateFrom || dateTo || customerFilter
+                ? 'bg-primary text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+          </button>
         </div>
+
+        {/* Date & Customer Filters */}
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-200">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">From Date</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">To Date</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Customer Name</label>
+              <input
+                type="text"
+                value={customerFilter}
+                onChange={(e) => { setCustomerFilter(e.target.value); setPage(1); }}
+                placeholder="Filter by customer..."
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm"
+              />
+            </div>
+            {(dateFrom || dateTo || customerFilter) && (
+              <div className="md:col-span-3">
+                <button
+                  onClick={() => { setDateFrom(''); setDateTo(''); setCustomerFilter(''); setPage(1); }}
+                  className="text-sm text-red-600 font-medium hover:underline"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         
         <div className="flex flex-wrap gap-2" data-testid="status-filters">
           {statuses.map((status) => (

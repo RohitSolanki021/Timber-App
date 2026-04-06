@@ -52,7 +52,7 @@ interface OrderV2 {
 
 const ORDERS_PER_PAGE = 10;
 
-// Simplified statuses
+// Simplified statuses - Pending, Approved, Delivered, Cancelled (no Completed)
 const ORDER_STATUSES = ["All", "Pending", "Approved", "Delivered", "Cancelled"];
 
 export default function OrdersV2() {
@@ -305,7 +305,7 @@ export default function OrdersV2() {
               }`}
               data-testid={`filter-${status.toLowerCase()}`}
             >
-              {status === 'Pending' ? 'Order Placed' : status}
+              {status}
             </button>
           ))}
         </div>
@@ -375,8 +375,20 @@ export default function OrdersV2() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-slate-900 font-medium">{order.total_quantity}</span>
-                      <span className="text-xs text-slate-400 ml-1">qty</span>
+                      <div>
+                        <span className="text-slate-900 font-medium">{order.total_quantity}</span>
+                        <span className="text-xs text-slate-400 ml-1">items</span>
+                        {order.items && order.items.length > 0 && (
+                          <p className="text-xs text-slate-500 mt-1 truncate max-w-[200px]">
+                            {order.items.slice(0, 2).map((item, i) => (
+                              <span key={i}>
+                                {i > 0 ? ', ' : ''}{item.product_name} {item.thickness}mm
+                              </span>
+                            ))}
+                            {order.items.length > 2 && <span className="text-slate-400"> +{order.items.length - 2} more</span>}
+                          </p>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-semibold text-slate-900">
@@ -385,7 +397,7 @@ export default function OrdersV2() {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                        {order.status === 'Pending' ? 'Order Placed' : order.status}
+                        {order.status}
                       </span>
                     </td>
                     <td className="px-6 py-4">

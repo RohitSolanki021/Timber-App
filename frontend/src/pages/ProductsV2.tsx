@@ -54,6 +54,7 @@ export default function ProductsV2() {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [editingProduct, setEditingProduct] = useState<ProductV2 | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -70,6 +71,53 @@ export default function ProductsV2() {
     'Authorization': `Bearer ${getToken()}`,
     'Content-Type': 'application/json'
   });
+
+  // Handle edit product - populate form and open modal
+  const handleEditProduct = (product: ProductV2) => {
+    // Convert product to form data with variants
+    const variants: ProductVariant[] = [];
+    for (const thickness of product.thicknesses) {
+      for (const size of product.sizes) {
+        variants.push({
+          thickness,
+          size,
+          stock: 0, // Stock is managed separately
+          prices: product.pricing_tiers || {}
+        });
+      }
+    }
+    
+    // If no variants created, add at least one with the existing data
+    if (variants.length === 0) {
+      variants.push({
+        thickness: product.thicknesses[0] || '',
+        size: product.sizes[0] || '',
+        stock: 0,
+        prices: product.pricing_tiers || {}
+      });
+    }
+    
+    setFormData({
+      name: product.name,
+      group: product.group,
+      description: product.description || '',
+      variants
+    });
+    setEditingProduct(product);
+    setShowAddModal(true);
+  };
+
+  // Close modal and reset
+  const closeModal = () => {
+    setShowAddModal(false);
+    setEditingProduct(null);
+    setFormData({
+      name: '',
+      group: 'Plywood',
+      description: '',
+      variants: []
+    });
+  };
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -163,7 +211,7 @@ export default function ProductsV2() {
     }));
   };
 
-  // Save product
+  // Save product (create or update)
   const handleSaveProduct = async () => {
     if (!formData.name.trim()) {
       toast.error('Product name is required');
@@ -182,20 +230,28 @@ export default function ProductsV2() {
     
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/products-v2`, {
-        method: 'POST',
+      const url = editingProduct 
+        ? `${API_BASE}/admin/products-v2/${editingProduct.id}`
+        : `${API_BASE}/admin/products-v2`;
+      
+      const method = editingProduct ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
         headers: authHeaders(),
         body: JSON.stringify(formData)
       });
       
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.detail || 'Failed to create product');
+        throw new Error(error.detail || `Failed to ${editingProduct ? 'update' : 'create'} product`);
       }
       
-      toast.success('Product Created', 'Product with variants has been created');
-      setShowAddModal(false);
-      setFormData({ name: '', group: 'Plywood', description: '', variants: [] });
+      toast.success(
+        editingProduct ? 'Product Updated' : 'Product Created', 
+        editingProduct ? 'Product has been updated successfully' : 'Product with variants has been created'
+      );
+      closeModal();
       loadProducts();
     } catch (err: any) {
       toast.error('Save Failed', err.message);
@@ -385,7 +441,8 @@ export default function ProductsV2() {
           {paginatedProducts.map(product => (
             <div
               key={product.id}
-              className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-primary/30 hover:shadow-lg transition-all"
+              onClick={() => handleEditProduct(product)}
+              className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer group"
               data-testid={`product-card-${product.id}`}
             >
               <div className="flex items-start justify-between mb-4">
@@ -399,15 +456,18 @@ export default function ProductsV2() {
                     }
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-900">{product.name}</h3>
+                    <h3 className="font-bold text-slate-900 group-hover:text-primary transition-colors">{product.name}</h3>
                     <p className="text-xs text-slate-500">{product.id}</p>
                   </div>
                 </div>
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                  product.group === 'Plywood' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
-                }`}>
-                  {product.group}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                    product.group === 'Plywood' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {product.group}
+                  </span>
+                  <Edit3 className="w-4 h-4 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
               
               <div className="space-y-3">
@@ -431,6 +491,12 @@ export default function ProductsV2() {
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Base Price (Tier 1)</p>
                   <p className="text-lg font-bold text-primary">₹{Number(product.base_price).toLocaleString()}</p>
                 </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+                <span className="text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                  Click to edit product →
+                </span>
               </div>
             </div>
           ))}
