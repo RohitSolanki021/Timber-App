@@ -2859,12 +2859,22 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     # Get sales person info to find their ID
     sales_person = db.users.find_one({"email": user_id})
     sales_person_id = str(sales_person.get("_id", "")) if sales_person else None
+    sales_person_name = sales_person.get("name", "") if sales_person else ""
     
     # Count assigned customers
-    assigned_customers = db.customers.count_documents({"sales_person_id": sales_person_id})
+    assigned_customers_count = db.customers.count_documents({"sales_person_id": sales_person_id})
     
-    # Count orders placed by this sales person (via placed_by)
-    order_query = {"placed_by": user_id}
+    # Get assigned customer IDs
+    assigned_customer_ids = [c["id"] for c in db.customers.find({"sales_person_id": sales_person_id}, {"id": 1})]
+    
+    # Query for orders: placed by sales person OR for assigned customers
+    order_query = {
+        "$or": [
+            {"placed_by": sales_person_name},
+            {"placed_by": user_id},
+            {"customer_id": {"$in": assigned_customer_ids}}
+        ]
+    }
     total_orders = db.orders_v2.count_documents(order_query)
     pending_orders = db.orders_v2.count_documents({**order_query, "status": "Pending"})
     
@@ -2873,7 +2883,7 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     now = datetime.utcnow()
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     monthly_orders = list(db.orders_v2.find({
-        "placed_by": user_id,
+        **order_query,
         "created_at": {"$gte": start_of_month.isoformat()}
     }, {"grand_total": 1}))
     monthly_sales = sum(o.get("grand_total", 0) or 0 for o in monthly_orders)
@@ -2882,12 +2892,9 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     start_of_week = now - timedelta(days=now.weekday())
     start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
     new_orders_week = db.orders_v2.count_documents({
-        "placed_by": user_id,
+        **order_query,
         "created_at": {"$gte": start_of_week.isoformat()}
     })
-    
-    # Get assigned customer IDs for invoice queries
-    assigned_customer_ids = [c["id"] for c in db.customers.find({"sales_person_id": sales_person_id}, {"id": 1})]
     
     # Count pending invoices and total outstanding
     pending_invoices = list(db.invoices_v2.find({
@@ -2900,7 +2907,7 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     return {
         "monthly_sales": monthly_sales,
         "new_orders_week": new_orders_week,
-        "assigned_customers": assigned_customers,
+        "assigned_customers": assigned_customers_count,
         "pending_orders_count": pending_orders,
         "total_outstanding": total_outstanding,
         "due_invoices_count": due_invoices_count,
@@ -2915,10 +2922,26 @@ async def get_sales_orders(
     status: Optional[str] = None,
     payload: dict = Depends(verify_token)
 ):
-    """Get orders placed by this sales person"""
+    """Get orders for customers assigned to this sales person"""
     user_id = payload.get("user_id")
     
-    query = {"placed_by": user_id}
+    # Get sales person info
+    sales_person = db.users.find_one({"email": user_id})
+    sales_person_id = str(sales_person.get("_id", "")) if sales_person else None
+    sales_person_name = sales_person.get("name", "") if sales_person else ""
+    
+    # Find customers assigned to this sales person
+    assigned_customers = list(db.customers.find({"sales_person_id": sales_person_id}, {"id": 1}))
+    assigned_customer_ids = [c["id"] for c in assigned_customers]
+    
+    # Query orders: either placed_by matches sales person name OR customer_id is in assigned customers
+    query = {
+        "$or": [
+            {"placed_by": sales_person_name},
+            {"placed_by": user_id},
+            {"customer_id": {"$in": assigned_customer_ids}}
+        ]
+    }
     if status:
         query["status"] = status
     
@@ -2953,12 +2976,19 @@ async def get_sales_order_detail(order_id: str, payload: dict = Depends(verify_t
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Verify this order was placed by this sales person
-    if order.get("placed_by") != user_id:
+    # Get sales person info
+    sales_person = db.users.find_one({"email": user_id})
+    sales_person_id = str(sales_person.get("_id", "")) if sales_person else None
+    sales_person_name = sales_person.get("name", "") if sales_person else ""
+    
+    # Verify this order is accessible: placed by sales person OR customer is assigned to them
+    customer = db.customers.find_one({"id": order.get("customer_id")})
+    is_placed_by = order.get("placed_by") in [user_id, sales_person_name]
+    is_assigned_customer = customer and customer.get("sales_person_id") == sales_person_id
+    
+    if not (is_placed_by or is_assigned_customer):
         raise HTTPException(status_code=403, detail="Not authorized to view this order")
     
-    # Get customer details
-    customer = db.customers.find_one({"id": order.get("customer_id")})
     order["customerName"] = customer.get("name", "Unknown") if customer else "Unknown"
     order["amount"] = order.get("grand_total", order.get("total_amount", 0))
     order["order_date"] = order.get("created_at", "")
