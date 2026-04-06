@@ -26,56 +26,38 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 - `orders_v2`: {items, status, photo_url, order_type (Plywood/Timber/Mixed), transport_details, grand_total}
 - `invoices_v2`: {order_id, items, amount, order_type} - **ONLY for Timber orders**
 - `stock`: {stock_key, product_id, thickness, size, quantity, reserved}
-- `customers`: {pricing_tier (1-6), approval_status, business_name}
+- `customers`: {pricing_tier (1-6), approval_status, business_name, sales_person_id}
 
 ## Implementation Status
 
 ### Completed Features (April 6, 2026)
 
+#### Sales Portal - FULLY FIXED ✅
+- [x] **Dashboard** - Shows Monthly Sales, Assigned Customers (7), Pending Orders, Outstanding (₹23,004.76), Due Invoices Alert
+- [x] **Customers Page** - Shows only assigned customers with search/filter (All/Approved/Pending)
+- [x] **Orders Page** - Status filters: All, Pending, Approved, Dispatched, Cancelled
+- [x] **Invoices Page** - View, Download, Share (WhatsApp) buttons on each invoice
+- [x] **Invoice Detail Page** - Full invoice details with Download and WhatsApp share
+- [x] **Fast Order** - Customer selection with search, Plywood/Timber product ordering
+- [x] **CartProvider** - Wrapping App to enable cart functionality across pages
+
 #### Order Status Naming - FIXED
-- [x] "Pending" used consistently (not "Order Placed")
-- [x] Status filters: All, Pending, Approved, Delivered, Cancelled
-- [x] Removed "Completed" from filters (dispatch itself is completed)
+- [x] Status filters: All, Pending, Approved, Dispatched, Cancelled
+- [x] Plywood status progression: Pending → Approved → Estimated → Cancelled
+- [x] Timber status progression: Pending → Approved → Dispatched → Cancelled
 - [x] Updated in Admin Portal, Customer Portal, Sales Portal
 
 #### Admin Products V2 - Edit Functionality
 - [x] Click product card to open edit modal
 - [x] Modal shows "Edit Product" title when editing
 - [x] "Save Changes" button for updates
-- [x] PUT /api/admin/products-v2/{product_id} endpoint added
+- [x] PUT /api/admin/products-v2/{product_id} endpoint
 
-#### Sales Portal Enhancements
-- [x] /api/sales/orders endpoint - returns orders placed by logged-in sales person
-- [x] /api/sales/invoices endpoint - returns ONLY invoices for customers assigned to the sales person
-- [x] Correct status filters (All, Pending, Approved, Delivered, Cancelled)
-
-#### Customer Portal Fixes
-- [x] Status shows "Pending" not "Order Placed"
-- [x] Correct status filters in Orders page
-- [x] Dashboard shows correct status on recent orders
-
-#### Order Placing - FIXED
-- [x] Customer portal can place orders (customer_id derived from token)
-- [x] Stock validation works - allows order if stock exists, shows error if insufficient
-- [x] Unified orders - single order can contain both Plywood & Timber items
-- [x] Next button z-index fixed - no longer blocked by nav
-
-#### Product Page - V2
-- [x] Products list page with search and category filters (All/Plywood/Timber)
-- [x] Clickable product cards showing name, description, price, variants count
-- [x] Product detail page with full tier pricing and stock visibility
-
-#### FastOrder UX
-- [x] NO auto-advance - quantity field doesn't auto-add rows when typing
-- [x] Enter key to add row - Press Enter in quantity field to add next product row
-- [x] "+ Add Product" button persists - always visible for adding more items
-- [x] Filter buttons don't reset items - PLYWOOD/TIMBER toggle only filters products
-- [x] Mixed orders supported - can add Plywood + Timber items in same order
-
-#### Business Logic
-- [x] GST REMOVED - No CGST/SGST calculations
-- [x] Plywood orders do NOT generate invoices - use "Estimated" pricing only
-- [x] Order types: Plywood, Timber, or Mixed based on items
+#### Sales Portal API Endpoints
+- [x] `/api/sales/dashboard` - Returns monthly_sales, assigned_customers, pending_orders_count, total_outstanding, due_invoices_count
+- [x] `/api/sales/customers` - Returns ONLY customers assigned to the logged-in sales person
+- [x] `/api/sales/orders` - Returns orders placed by the sales person
+- [x] `/api/sales/invoices` - Returns ONLY invoices for customers assigned to the sales person
 
 ### Test Credentials
 - Super Admin: admin@naturalplylam.com / admin123
@@ -85,8 +67,7 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 ## Backlog
 
 ### P1 - Next
-- [ ] WhatsApp sharing for invoices in Sales Portal (requires integration_playbook_expert_v2)
-- [ ] PDF generation with reportlab for invoice download
+- [ ] PDF generation with reportlab for invoice download (currently text file)
 - [ ] Add product images upload in Admin
 
 ### P2 - Future
@@ -95,10 +76,23 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 - [ ] Product stock bulk update UI
 
 ## Test Reports
-- Latest: `/app/test_reports/iteration_10.json` - All tests passing
+- Latest: `/app/test_reports/iteration_11.json` - All tests passing (Sales Portal)
+- Previous: `/app/test_reports/iteration_10.json` - All tests passing (Admin Portal)
 
-## Important Notes
-- When making changes to sales-portal or customer-portal, remember to:
-  1. Run `yarn build` in the respective directory
-  2. Copy builds to `/app/frontend/dist/sales/` and `/app/frontend/public/sales/` (for sales-portal)
-  3. Copy builds to `/app/frontend/dist/portal/` and `/app/frontend/public/portal/` (for customer-portal)
+## Important Build Notes
+When making changes to sales-portal or customer-portal:
+1. Run `yarn build` in the respective directory
+2. Copy builds to `/app/frontend/dist/sales/` and `/app/frontend/public/sales/` (for sales-portal)
+3. Copy builds to `/app/frontend/dist/portal/` and `/app/frontend/public/portal/` (for customer-portal)
+
+## Sales Portal Features Summary
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Login | ✅ | sales@naturalplylam.com / sales123 |
+| Dashboard | ✅ | Stats: Monthly Sales, Customers, Pending Orders, Outstanding |
+| Customers | ✅ | Assigned customers only with search/filter |
+| Fast Order | ✅ | Customer selection + Plywood/Timber ordering |
+| Orders | ✅ | Status filters: All/Pending/Approved/Dispatched/Cancelled |
+| Invoices | ✅ | View/Download/Share buttons |
+| Invoice Detail | ✅ | Download + WhatsApp share |
+| Profile | ✅ | User profile management |
