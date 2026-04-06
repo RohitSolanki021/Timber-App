@@ -47,7 +47,8 @@ export default function Orders() {
     setFilteredOrders(result);
   }, [search, statusFilter, orders]);
 
-  const statuses = ["All", "Created", "Approved", "Invoiced", "Dispatched", "Completed", "Cancelled"];
+  // Statuses: Pending, Approved, Delivered, Cancelled (no "Completed" or "Dispatched")
+  const statuses = ["All", "Pending", "Approved", "Delivered", "Cancelled"];
   const currentPage = pagination?.page ?? page;
   const totalPages = Math.max(1, pagination?.total_pages ?? page);
   const hasPrevious = currentPage > 1;
@@ -55,12 +56,9 @@ export default function Orders() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      created: 'bg-blue-100 text-blue-700',
       pending: 'bg-amber-100 text-amber-700',
       approved: 'bg-indigo-100 text-indigo-700',
-      invoiced: 'bg-purple-100 text-purple-700',
-      dispatched: 'bg-cyan-100 text-cyan-700',
-      completed: 'bg-emerald-100 text-emerald-700',
+      delivered: 'bg-emerald-100 text-emerald-700',
       cancelled: 'bg-red-100 text-red-700'
     };
     return styles[status.toLowerCase()] || 'bg-slate-100 text-slate-700';

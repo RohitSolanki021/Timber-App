@@ -833,6 +833,67 @@ async def create_product_v2(product: ProductWithVariants, payload: dict = Depend
     del product_doc["_id"]
     return {"success": True, "message": "Product created", "product": product_doc}
 
+@app.put("/api/admin/products-v2/{product_id}")
+async def update_product_v2(product_id: str, product: ProductWithVariants, payload: dict = Depends(verify_token)):
+    """Update an existing product with variants (thickness/size) and tier pricing"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only admin can update products")
+    
+    # Check if product exists
+    existing = db.products_v2.find_one({"id": product_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Collect all unique thicknesses, sizes, and build pricing tiers
+    thicknesses = list(set(v.thickness for v in product.variants))
+    sizes = list(set(v.size for v in product.variants))
+    
+    # Use first variant's tier 1 price as base
+    base_price = product.variants[0].prices.get("1", 0) if product.variants else 0
+    pricing_tiers = product.variants[0].prices if product.variants else {}
+    
+    # Update the product
+    update_data = {
+        "name": product.name,
+        "group": product.group,
+        "description": product.description or "",
+        "base_price": base_price,
+        "thicknesses": sorted(thicknesses, key=lambda x: float(x) if x.replace('.','').isdigit() else 0),
+        "sizes": sorted(sizes),
+        "pricing_tiers": pricing_tiers,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    db.products_v2.update_one({"id": product_id}, {"$set": update_data})
+    
+    # Update stock entries for each variant
+    # First, remove old stock entries for this product
+    db.stock.delete_many({"product_id": product_id})
+    
+    # Create new stock entries
+    for variant in product.variants:
+        stock_key = f"{product_id}_{variant.thickness}_{variant.size.replace(' ', '').replace('x', 'X')}"
+        stock_doc = {
+            "stock_key": stock_key,
+            "product_id": product_id,
+            "thickness": variant.thickness,
+            "size": variant.size,
+            "quantity": variant.stock,
+            "reserved": 0,
+            "variant_prices": variant.prices,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        db.stock.update_one(
+            {"stock_key": stock_key},
+            {"$set": stock_doc},
+            upsert=True
+        )
+    
+    # Get updated product
+    updated_product = db.products_v2.find_one({"id": product_id}, {"_id": 0})
+    return {"success": True, "message": "Product updated", "product": updated_product}
+
 @app.get("/api/admin/products-v2/template")
 async def download_product_template(payload: dict = Depends(verify_token)):
     """Download Excel template for product import"""
@@ -2795,18 +2856,143 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     """Dashboard for sales person"""
     user_id = payload.get("user_id")
     
-    # Count orders placed by this sales person
-    total_orders = db.orders_v2.count_documents({"placed_by_role": "Sales Person"})
-    pending_orders = db.orders_v2.count_documents({"placed_by_role": "Sales Person", "status": "Pending"})
+    # Count orders placed by this sales person (via placed_by)
+    order_query = {"placed_by": user_id}
+    total_orders = db.orders_v2.count_documents(order_query)
+    pending_orders = db.orders_v2.count_documents({**order_query, "status": "Pending"})
     
     # Get recent orders
-    recent_orders = list(db.orders_v2.find({"placed_by_role": "Sales Person"}, {"_id": 0}).sort("created_at", -1).limit(5))
+    recent_orders = list(db.orders_v2.find(order_query, {"_id": 0}).sort("created_at", -1).limit(5))
     
     return {
         "total_orders": total_orders,
         "pending_orders": pending_orders,
         "recent_orders": recent_orders
     }
+
+@app.get("/api/sales/orders")
+async def get_sales_orders(
+    page: int = 1,
+    per_page: int = 20,
+    status: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get orders placed by this sales person"""
+    user_id = payload.get("user_id")
+    
+    query = {"placed_by": user_id}
+    if status:
+        query["status"] = status
+    
+    total = db.orders_v2.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    orders = list(db.orders_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    # Get customer names
+    for order in orders:
+        customer = db.customers.find_one({"id": order.get("customer_id")})
+        order["customerName"] = customer.get("name", "Unknown") if customer else "Unknown"
+        order["amount"] = order.get("grand_total", order.get("total_amount", 0))
+        order["order_date"] = order.get("created_at", "")
+    
+    return {
+        "data": orders,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/sales/orders/{order_id}")
+async def get_sales_order_detail(order_id: str, payload: dict = Depends(verify_token)):
+    """Get single order detail for sales person"""
+    user_id = payload.get("user_id")
+    
+    order = db.orders_v2.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Verify this order was placed by this sales person
+    if order.get("placed_by") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this order")
+    
+    # Get customer details
+    customer = db.customers.find_one({"id": order.get("customer_id")})
+    order["customerName"] = customer.get("name", "Unknown") if customer else "Unknown"
+    order["amount"] = order.get("grand_total", order.get("total_amount", 0))
+    order["order_date"] = order.get("created_at", "")
+    
+    return order
+
+@app.get("/api/sales/invoices")
+async def get_sales_invoices(
+    page: int = 1,
+    per_page: int = 20,
+    status: Optional[str] = None,
+    payload: dict = Depends(verify_token)
+):
+    """Get invoices ONLY for customers assigned to this sales person"""
+    user_id = payload.get("user_id")
+    
+    # Get sales person info to find their ID
+    sales_person = db.users.find_one({"email": user_id})
+    sales_person_id = str(sales_person.get("_id", "")) if sales_person else None
+    
+    # Find customers assigned to this sales person
+    assigned_customers = list(db.customers.find(
+        {"sales_person_id": sales_person_id},
+        {"id": 1}
+    ))
+    assigned_customer_ids = [c["id"] for c in assigned_customers]
+    
+    # Query invoices only for those customers
+    query = {"customer_id": {"$in": assigned_customer_ids}}
+    if status:
+        query["status"] = status
+    
+    total = db.invoices_v2.count_documents(query)
+    skip = (page - 1) * per_page
+    
+    invoices = list(db.invoices_v2.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(per_page))
+    
+    # Get customer names
+    for inv in invoices:
+        customer = db.customers.find_one({"id": inv.get("customer_id")})
+        inv["customerName"] = customer.get("name", "Unknown") if customer else "Unknown"
+    
+    return {
+        "data": invoices,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page
+        }
+    }
+
+@app.get("/api/sales/invoices/{invoice_id}")
+async def get_sales_invoice_detail(invoice_id: str, payload: dict = Depends(verify_token)):
+    """Get single invoice detail for sales person - must be for their customer"""
+    user_id = payload.get("user_id")
+    
+    invoice = db.invoices_v2.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Get sales person info
+    sales_person = db.users.find_one({"email": user_id})
+    sales_person_id = str(sales_person.get("_id", "")) if sales_person else None
+    
+    # Verify this invoice belongs to their assigned customer
+    customer = db.customers.find_one({"id": invoice.get("customer_id")})
+    if not customer or customer.get("sales_person_id") != sales_person_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this invoice")
+    
+    invoice["customerName"] = customer.get("name", "Unknown")
+    return invoice
 
 if __name__ == "__main__":
     import uvicorn
