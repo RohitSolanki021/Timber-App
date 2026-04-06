@@ -16,6 +16,7 @@ import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import Welcome from "./pages/Welcome";
 import Users from "./pages/Users";
+import Banners from "./pages/Banners";
 
 // Check if user is authenticated
 const isAuthenticated = () => {
@@ -98,6 +99,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             {/* Super Admin Only Routes */}
             <Route path="/users" element={<SuperAdminRoute><Users /></SuperAdminRoute>} />
+            <Route path="/banners" element={<SuperAdminRoute><Banners /></SuperAdminRoute>} />
           </Route>
 
           {/* Catch-all redirect */}

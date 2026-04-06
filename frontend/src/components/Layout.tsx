@@ -11,7 +11,8 @@ import {
   X,
   Package,
   ChevronDown,
-  UserCog
+  UserCog,
+  Image
 } from "lucide-react";
 import { apiProxy } from "../apiProxy";
 
@@ -33,6 +34,7 @@ const getNavItems = (isSuperAdmin: boolean): NavItem[] => {
   
   if (isSuperAdmin) {
     items.push({ to: "/users", icon: UserCog, label: "Staff", superAdminOnly: true });
+    items.push({ to: "/banners", icon: Image, label: "Banners", superAdminOnly: true });
   }
   
   return items;
