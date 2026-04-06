@@ -32,26 +32,38 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 
 ### Completed Features (April 6, 2026)
 
-#### Order Placing - FIXED ✅
+#### Order Status Naming - FIXED
+- [x] "Pending" used consistently (not "Order Placed")
+- [x] Status filters: All, Pending, Approved, Delivered, Cancelled
+- [x] Removed "Completed" from filters (dispatch itself is completed)
+- [x] Updated in Admin Portal, Customer Portal, Sales Portal
+
+#### Admin Products V2 - Edit Functionality
+- [x] Click product card to open edit modal
+- [x] Modal shows "Edit Product" title when editing
+- [x] "Save Changes" button for updates
+- [x] PUT /api/admin/products-v2/{product_id} endpoint added
+
+#### Sales Portal Enhancements
+- [x] /api/sales/orders endpoint - returns orders placed by logged-in sales person
+- [x] /api/sales/invoices endpoint - returns ONLY invoices for customers assigned to the sales person
+- [x] Correct status filters (All, Pending, Approved, Delivered, Cancelled)
+
+#### Customer Portal Fixes
+- [x] Status shows "Pending" not "Order Placed"
+- [x] Correct status filters in Orders page
+- [x] Dashboard shows correct status on recent orders
+
+#### Order Placing - FIXED
 - [x] Customer portal can place orders (customer_id derived from token)
 - [x] Stock validation works - allows order if stock exists, shows error if insufficient
 - [x] Unified orders - single order can contain both Plywood & Timber items
 - [x] Next button z-index fixed - no longer blocked by nav
 
-#### Product Page - NEW ✅
+#### Product Page - V2
 - [x] Products list page with search and category filters (All/Plywood/Timber)
 - [x] Clickable product cards showing name, description, price, variants count
-- [x] Product detail page with:
-  - Product image (with placeholder for products without images)
-  - Image gallery with thumbnails (if multiple images)
-  - Full-screen image modal on click
-  - Your Price display (based on customer's tier)
-  - Thickness dropdown to select variant
-  - Sizes & Stock table showing available stock per variant
-  - **"Out of Stock"** indicator in red when stock = 0
-  - **Stock quantity** in green when available
-  - Pricing by Tier table showing all 6 tier prices
-  - Place Order button linking to FastOrder page
+- [x] Product detail page with full tier pricing and stock visibility
 
 #### FastOrder UX
 - [x] NO auto-advance - quantity field doesn't auto-add rows when typing
@@ -59,31 +71,34 @@ Transform the application into a direct B2B Plywood/Timber ordering system with:
 - [x] "+ Add Product" button persists - always visible for adding more items
 - [x] Filter buttons don't reset items - PLYWOOD/TIMBER toggle only filters products
 - [x] Mixed orders supported - can add Plywood + Timber items in same order
-- [x] Summary bar shows "Estimated" only for Plywood-only orders
 
 #### Business Logic
 - [x] GST REMOVED - No CGST/SGST calculations
 - [x] Plywood orders do NOT generate invoices - use "Estimated" pricing only
-- [x] Status renamed: "Pending" → "Order Placed" in UI
 - [x] Order types: Plywood, Timber, or Mixed based on items
 
 ### Test Credentials
 - Super Admin: admin@naturalplylam.com / admin123
 - Sales Person: sales@naturalplylam.com / sales123
-- Customer (Tier 2): customer1@example.com / customer123
+- Customer (Tier 2): customer1@example.com / customer123 (MPIN: 1234)
 
 ## Backlog
 
 ### P1 - Next
-- [ ] WhatsApp sharing for invoices in Sales Portal
+- [ ] WhatsApp sharing for invoices in Sales Portal (requires integration_playbook_expert_v2)
 - [ ] PDF generation with reportlab for invoice download
 - [ ] Add product images upload in Admin
 
 ### P2 - Future
 - [ ] Admin Banner Management UI
-- [ ] Sales Portal: Filter invoices to own customers only
 - [ ] CSV import for customers
 - [ ] Product stock bulk update UI
 
 ## Test Reports
-- Latest: `/app/test_reports/iteration_9.json`
+- Latest: `/app/test_reports/iteration_10.json` - All tests passing
+
+## Important Notes
+- When making changes to sales-portal or customer-portal, remember to:
+  1. Run `yarn build` in the respective directory
+  2. Copy builds to `/app/frontend/dist/sales/` and `/app/frontend/public/sales/` (for sales-portal)
+  3. Copy builds to `/app/frontend/dist/portal/` and `/app/frontend/public/portal/` (for customer-portal)
