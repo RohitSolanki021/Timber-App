@@ -52,8 +52,9 @@ interface OrderV2 {
 
 const ORDERS_PER_PAGE = 10;
 
-// Simplified statuses - Pending, Approved, Delivered, Cancelled (no Completed)
-const ORDER_STATUSES = ["All", "Pending", "Approved", "Delivered", "Cancelled"];
+// Statuses: Pending, Approved, Dispatched, Cancelled
+// For Plywood: Pending, Approved, Estimated, Cancelled
+const ORDER_STATUSES = ["All", "Pending", "Approved", "Dispatched", "Cancelled"];
 
 export default function OrdersV2() {
   const toast = useToast();
