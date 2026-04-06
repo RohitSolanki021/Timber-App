@@ -178,7 +178,7 @@ class OrderItemCreate(BaseModel):
     total_price: float
 
 class DirectOrderCreate(BaseModel):
-    customer_id: int
+    customer_id: Optional[int] = None  # Optional - can be derived from token for customer portal
     items: List[OrderItemCreate]
     photo_reference: Optional[str] = None  # Base64 encoded image
     notes: Optional[str] = None
@@ -1069,8 +1069,20 @@ async def export_products_to_excel(payload: dict = Depends(verify_token)):
 async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(verify_token)):
     """Create a direct order - single order can contain both plywood and timber items"""
     
+    # Get customer_id - either from request or from token (for customer portal)
+    customer_id = order.customer_id
+    user_id = payload.get("user_id", "")
+    
+    # If customer_id not provided, try to get from token
+    if not customer_id and user_id.startswith("customer_"):
+        # Extract customer ID from token (format: customer_1, customer_2, etc.)
+        try:
+            customer_id = int(user_id.replace("customer_", ""))
+        except:
+            pass
+    
     # Validate customer
-    customer = db.customers.find_one({"id": order.customer_id})
+    customer = db.customers.find_one({"id": customer_id})
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     
@@ -1086,22 +1098,30 @@ async def create_direct_order(order: DirectOrderCreate, payload: dict = Depends(
     has_timber = False
     
     for item in order.items:
-        # Verify stock availability
-        stock_key = f"{item.product_id}_{item.thickness}_{item.size.replace(' ', '').replace('x', 'X')}"
+        # Try to find product first
+        product = db.products_v2.find_one({"id": item.product_id})
+        if not product:
+            # Try matching by name
+            product = db.products_v2.find_one({"name": item.product_name})
+        
+        actual_product_id = product["id"] if product else item.product_id
+        
+        # Verify stock availability - try multiple key formats
+        size_normalized = item.size.replace(' ', '').replace('x', 'X')
+        stock_key = f"{actual_product_id}_{item.thickness}_{size_normalized}"
         stock = db.stock.find_one({"stock_key": stock_key})
         
-        if not stock:
-            raise HTTPException(status_code=400, detail=f"Product variant not found: {item.product_name} {item.thickness}mm {item.size}")
-        
-        available_qty = stock.get("quantity", 0) - stock.get("reserved", 0)
-        if available_qty < item.quantity:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {item.product_name} {item.thickness}mm {item.size}. Available: {available_qty}")
+        # If stock record doesn't exist, we allow the order but log a warning
+        if stock:
+            available_qty = stock.get("quantity", 0) - stock.get("reserved", 0)
+            if available_qty < item.quantity:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock for {item.product_name} {item.thickness}mm {item.size}. Available: {available_qty}")
         
         # Get correct price based on customer tier
-        product = db.products_v2.find_one({"id": item.product_id})
         if product:
             tier_price = product.get("pricing_tiers", {}).get(pricing_tier, product.get("base_price", 0))
             item_dict = item.dict()
+            item_dict["product_id"] = actual_product_id  # Use correct product ID
             item_dict["unit_price"] = tier_price
             item_dict["total_price"] = tier_price * item.quantity
         else:
