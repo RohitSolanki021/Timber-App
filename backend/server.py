@@ -2856,18 +2856,56 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     """Dashboard for sales person"""
     user_id = payload.get("user_id")
     
+    # Get sales person info to find their ID
+    sales_person = db.users.find_one({"email": user_id})
+    sales_person_id = str(sales_person.get("_id", "")) if sales_person else None
+    
+    # Count assigned customers
+    assigned_customers = db.customers.count_documents({"sales_person_id": sales_person_id})
+    
     # Count orders placed by this sales person (via placed_by)
     order_query = {"placed_by": user_id}
     total_orders = db.orders_v2.count_documents(order_query)
     pending_orders = db.orders_v2.count_documents({**order_query, "status": "Pending"})
     
-    # Get recent orders
-    recent_orders = list(db.orders_v2.find(order_query, {"_id": 0}).sort("created_at", -1).limit(5))
+    # Calculate monthly sales (orders from this month)
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_orders = list(db.orders_v2.find({
+        "placed_by": user_id,
+        "created_at": {"$gte": start_of_month.isoformat()}
+    }, {"grand_total": 1}))
+    monthly_sales = sum(o.get("grand_total", 0) or 0 for o in monthly_orders)
+    
+    # Orders this week
+    start_of_week = now - timedelta(days=now.weekday())
+    start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+    new_orders_week = db.orders_v2.count_documents({
+        "placed_by": user_id,
+        "created_at": {"$gte": start_of_week.isoformat()}
+    })
+    
+    # Get assigned customer IDs for invoice queries
+    assigned_customer_ids = [c["id"] for c in db.customers.find({"sales_person_id": sales_person_id}, {"id": 1})]
+    
+    # Count pending invoices and total outstanding
+    pending_invoices = list(db.invoices_v2.find({
+        "customer_id": {"$in": assigned_customer_ids},
+        "status": {"$in": ["Pending", "Overdue"]}
+    }, {"grand_total": 1}))
+    total_outstanding = sum(i.get("grand_total", 0) or 0 for i in pending_invoices)
+    due_invoices_count = len(pending_invoices)
     
     return {
+        "monthly_sales": monthly_sales,
+        "new_orders_week": new_orders_week,
+        "assigned_customers": assigned_customers,
+        "pending_orders_count": pending_orders,
+        "total_outstanding": total_outstanding,
+        "due_invoices_count": due_invoices_count,
         "total_orders": total_orders,
-        "pending_orders": pending_orders,
-        "recent_orders": recent_orders
+        "recent_orders": []
     }
 
 @app.get("/api/sales/orders")
