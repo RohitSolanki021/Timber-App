@@ -218,32 +218,31 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Pending Orders Section - Full Width */}
-      {pendingOrders.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="pending-orders-section">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-amber-50">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-amber-600" />
-              <h2 className="font-semibold text-slate-900">Pending Orders - Action Required</h2>
-            </div>
-            <Link to="/orders?status=Pending" className="text-sm text-primary font-medium hover:underline">
-              View All →
-            </Link>
+      {/* Pending Plywood Orders Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="pending-plywood-orders">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-orange-50">
+          <div className="flex items-center gap-2">
+            <Package className="w-5 h-5 text-orange-600" />
+            <h2 className="font-semibold text-slate-900">Pending Plywood Orders</h2>
           </div>
+          <Link to="/orders?status=Pending&type=Plywood" className="text-sm text-primary font-medium hover:underline">
+            View All →
+          </Link>
+        </div>
+        {pendingOrders.filter(o => o.order_type === 'Plywood').length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Order ID</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Customer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Items</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Estimated</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {pendingOrders.slice(0, 5).map((order) => (
+                {pendingOrders.filter(o => o.order_type === 'Plywood').slice(0, 5).map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
                       <Link to={`/orders`} className="font-medium text-primary hover:underline">{order.id}</Link>
@@ -251,13 +250,6 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{order.customerName}</p>
                       <p className="text-xs text-slate-500">Tier {order.pricing_tier}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${
-                        order.order_type === 'Plywood' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {order.order_type}
-                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm">
@@ -272,10 +264,7 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <p className="font-bold text-slate-900">₹{Number(order.grand_total || 0).toLocaleString()}</p>
-                      {order.order_type === 'Plywood' && (
-                        <p className="text-xs text-orange-600">Estimated</p>
-                      )}
+                      <p className="font-bold text-orange-600">₹{Number(order.grand_total || 0).toLocaleString()}</p>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
@@ -309,96 +298,106 @@ export default function Dashboard() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="px-6 py-8 text-center">
+            <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-400 text-sm">No pending plywood orders</p>
+          </div>
+        )}
+      </div>
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Latest Plywood Orders */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="latest-plywood-orders">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-orange-50">
-            <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-orange-600" />
-              <h2 className="font-semibold text-slate-900">Plywood Orders</h2>
-            </div>
-            <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-lg text-xs font-medium">
-              {dashboardData?.plywood_orders_count || 0}
-            </span>
+      {/* Pending Timber Orders Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="pending-timber-orders">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
+          <div className="flex items-center gap-2">
+            <TreePine className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-semibold text-slate-900">Pending Timber Orders</h2>
           </div>
-          <div className="divide-y divide-slate-100 max-h-80 overflow-auto">
-            {(dashboardData?.latest_plywood_orders || []).slice(0, 5).map((order: any) => (
-              <Link
-                key={order.id}
-                to={`/order/${order.id}`}
-                className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-              >
-                <div>
-                  <p className="font-medium text-slate-900 text-sm">{order.id}</p>
-                  <p className="text-xs text-slate-500">{order.customerName}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-slate-900 text-sm">₹{Number(order.grand_total || 0).toLocaleString()}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    order.status === 'Pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
-              </Link>
-            ))}
-            {(!dashboardData?.latest_plywood_orders || dashboardData.latest_plywood_orders.length === 0) && (
-              <div className="px-6 py-8 text-center">
-                <p className="text-slate-400 text-sm">No plywood orders</p>
-              </div>
-            )}
-          </div>
+          <Link to="/orders?status=Pending&type=Timber" className="text-sm text-primary font-medium hover:underline">
+            View All →
+          </Link>
         </div>
-
-        {/* Latest Timber Orders */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="latest-timber-orders">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-emerald-50">
-            <div className="flex items-center gap-2">
-              <TreePine className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-semibold text-slate-900">Timber Orders</h2>
-            </div>
-            <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-xs font-medium">
-              {dashboardData?.timber_orders_count || 0}
-            </span>
+        {pendingOrders.filter(o => o.order_type === 'Timber').length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Order ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Items</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pendingOrders.filter(o => o.order_type === 'Timber').slice(0, 5).map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <Link to={`/orders`} className="font-medium text-primary hover:underline">{order.id}</Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-900">{order.customerName}</p>
+                      <p className="text-xs text-slate-500">Tier {order.pricing_tier}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm">
+                        {order.items?.slice(0, 2).map((item: any, i: number) => (
+                          <p key={i} className="text-slate-600 truncate max-w-[200px]">
+                            {item.product_name} - {item.thickness}mm × {item.quantity}
+                          </p>
+                        ))}
+                        {order.items?.length > 2 && (
+                          <p className="text-xs text-slate-400">+{order.items.length - 2} more</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <p className="font-bold text-emerald-600">₹{Number(order.grand_total || 0).toLocaleString()}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Link
+                          to={`/orders`}
+                          className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                          title="Edit Order"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => setConfirmDialog({ open: true, order, action: 'approve' })}
+                          disabled={actionLoading === order.id}
+                          className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                          title="Approve Order"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setConfirmDialog({ open: true, order, action: 'cancel' })}
+                          disabled={actionLoading === order.id}
+                          className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50"
+                          title="Cancel Order"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="divide-y divide-slate-100 max-h-80 overflow-auto">
-            {(dashboardData?.latest_timber_orders || []).slice(0, 5).map((order: any) => (
-              <Link
-                key={order.id}
-                to={`/order/${order.id}`}
-                className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-              >
-                <div>
-                  <p className="font-medium text-slate-900 text-sm">{order.id}</p>
-                  <p className="text-xs text-slate-500">{order.customerName}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-slate-900 text-sm">₹{Number(order.grand_total || 0).toLocaleString()}</p>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    order.status === 'Pending' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {order.status}
-                  </span>
-                </div>
-              </Link>
-            ))}
-            {(!dashboardData?.latest_timber_orders || dashboardData.latest_timber_orders.length === 0) && (
-              <div className="px-6 py-8 text-center">
-                <p className="text-slate-400 text-sm">No timber orders</p>
-              </div>
-            )}
+        ) : (
+          <div className="px-6 py-8 text-center">
+            <TreePine className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+            <p className="text-slate-400 text-sm">No pending timber orders</p>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Quick Actions */}
-        <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200 p-6" data-testid="quick-actions">
-            <h2 className="font-semibold text-slate-900 mb-4">Quick Actions</h2>
-            <div className="space-y-3">
+      {/* Quick Actions */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6" data-testid="quick-actions">
+        <h2 className="font-semibold text-slate-900 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {dashboardData?.pending_customers > 0 && (
                 <Link
                   to="/customers?status=pending"
@@ -459,8 +458,6 @@ export default function Dashboard() {
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-400" />
               </Link>
-            </div>
-          </div>
         </div>
       </div>
 
