@@ -894,6 +894,73 @@ async def update_product_v2(product_id: str, product: ProductWithVariants, paylo
     updated_product = db.products_v2.find_one({"id": product_id}, {"_id": 0})
     return {"success": True, "message": "Product updated", "product": updated_product}
 
+@app.post("/api/admin/products-v2/{product_id}/image")
+async def upload_product_image(product_id: str, file: UploadFile = File(...), payload: dict = Depends(verify_token)):
+    """Upload product image"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only admin can upload images")
+    
+    # Verify product exists
+    product = db.products_v2.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: JPEG, PNG, WebP, GIF")
+    
+    # Read file and convert to base64
+    import base64
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:  # 5MB limit
+        raise HTTPException(status_code=400, detail="File too large. Max 5MB")
+    
+    # Create data URL
+    base64_image = base64.b64encode(contents).decode('utf-8')
+    image_url = f"data:{file.content_type};base64,{base64_image}"
+    
+    # Get existing images or create empty list
+    existing_images = product.get("images", [])
+    existing_images.append({
+        "url": image_url,
+        "filename": file.filename,
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Update product with new image
+    db.products_v2.update_one(
+        {"id": product_id},
+        {"$set": {"images": existing_images, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"success": True, "message": "Image uploaded", "images": existing_images}
+
+@app.delete("/api/admin/products-v2/{product_id}/image/{image_index}")
+async def delete_product_image(product_id: str, image_index: int, payload: dict = Depends(verify_token)):
+    """Delete a product image by index"""
+    role = payload.get("role", "").lower()
+    if role not in ["super admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Only admin can delete images")
+    
+    product = db.products_v2.find_one({"id": product_id})
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    images = product.get("images", [])
+    if image_index < 0 or image_index >= len(images):
+        raise HTTPException(status_code=400, detail="Invalid image index")
+    
+    images.pop(image_index)
+    
+    db.products_v2.update_one(
+        {"id": product_id},
+        {"$set": {"images": images, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"success": True, "message": "Image deleted", "images": images}
+
 @app.get("/api/admin/products-v2/template")
 async def download_product_template(payload: dict = Depends(verify_token)):
     """Download Excel template for product import"""

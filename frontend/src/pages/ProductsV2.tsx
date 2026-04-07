@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { 
   Package, Plus, Upload, Download, Search, ChevronRight, ChevronLeft,
-  TreePine, Edit3, Trash2, X, Save, FileSpreadsheet, AlertCircle
+  TreePine, Edit3, Trash2, X, Save, FileSpreadsheet, AlertCircle, Image, Camera
 } from "lucide-react";
 import { useToast } from "../components/ui/Toast";
 
@@ -10,6 +10,12 @@ const API_BASE = (() => {
   if (configured) return configured.endsWith('/') ? configured.slice(0, -1) : configured;
   return `${window.location.origin}/api`;
 })();
+
+interface ProductImage {
+  url: string;
+  filename: string;
+  uploaded_at: string;
+}
 
 interface ProductVariant {
   thickness: string;
@@ -28,6 +34,7 @@ interface ProductV2 {
   sizes: string[];
   pricing_tiers: Record<string, number>;
   is_active: boolean;
+  images?: ProductImage[];
 }
 
 const PRODUCTS_PER_PAGE = 10;
@@ -55,6 +62,8 @@ export default function ProductsV2() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductV2 | null>(null);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -71,6 +80,62 @@ export default function ProductsV2() {
     'Authorization': `Bearer ${getToken()}`,
     'Content-Type': 'application/json'
   });
+
+  // Handle image upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, productId: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image too large. Max 5MB allowed.');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API_BASE}/admin/products-v2/${productId}/image`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+
+      const data = await res.json();
+      setProductImages(data.images || []);
+      toast.success('Image uploaded successfully');
+      fetchProducts();
+    } catch (err) {
+      toast.error('Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Handle image delete
+  const handleDeleteImage = async (productId: string, imageIndex: number) => {
+    if (!confirm('Delete this image?')) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/products-v2/${productId}/image/${imageIndex}`, {
+        method: 'DELETE',
+        headers: authHeaders()
+      });
+
+      if (!res.ok) throw new Error('Delete failed');
+
+      const data = await res.json();
+      setProductImages(data.images || []);
+      toast.success('Image deleted');
+      fetchProducts();
+    } catch (err) {
+      toast.error('Failed to delete image');
+    }
+  };
 
   // Handle edit product - populate form and open modal
   const handleEditProduct = (product: ProductV2) => {
@@ -103,6 +168,7 @@ export default function ProductsV2() {
       description: product.description || '',
       variants
     });
+    setProductImages(product.images || []);
     setEditingProduct(product);
     setShowAddModal(true);
   };
@@ -111,6 +177,7 @@ export default function ProductsV2() {
   const closeModal = () => {
     setShowAddModal(false);
     setEditingProduct(null);
+    setProductImages([]);
     setFormData({
       name: '',
       group: 'Plywood',
@@ -471,6 +538,16 @@ export default function ProductsV2() {
               </div>
               
               <div className="space-y-3">
+                {/* Product Image Thumbnail */}
+                {product.images && product.images.length > 0 && (
+                  <div className="mb-3">
+                    <img
+                      src={product.images[0].url}
+                      alt={product.name}
+                      className="w-full h-32 object-cover rounded-lg border border-slate-200"
+                    />
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Thicknesses</p>
                   <div className="flex flex-wrap gap-1">
@@ -591,6 +668,52 @@ export default function ProductsV2() {
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
+
+              {/* Product Images Section - Only show when editing */}
+              {editingProduct && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-900">Product Images</h3>
+                    <label className="text-sm text-primary hover:underline flex items-center gap-1 cursor-pointer">
+                      <Camera className="w-4 h-4" />
+                      {uploadingImage ? 'Uploading...' : 'Add Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload(e, editingProduct.id)}
+                        disabled={uploadingImage}
+                      />
+                    </label>
+                  </div>
+                  
+                  {productImages.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                      <Image className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm text-slate-500">No images uploaded</p>
+                      <p className="text-xs text-slate-400">Click "Add Image" to upload product photos</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-3">
+                      {productImages.map((img, idx) => (
+                        <div key={idx} className="relative group">
+                          <img
+                            src={img.url}
+                            alt={`Product ${idx + 1}`}
+                            className="w-full h-24 object-cover rounded-lg border border-slate-200"
+                          />
+                          <button
+                            onClick={() => handleDeleteImage(editingProduct.id, idx)}
+                            className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* Variants Section */}
               <div className="space-y-4">
