@@ -12,34 +12,96 @@ import {
   CheckCircle2,
   AlertCircle,
   Package,
-  TreePine
+  TreePine,
+  Edit3,
+  XCircle
 } from "lucide-react";
+import { useToast } from "../components/ui/Toast";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+
+const API_BASE = (() => {
+  const configured = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  if (configured) return configured.endsWith('/') ? configured.slice(0, -1) : configured;
+  return `${window.location.origin}/api`;
+})();
 
 export default function Dashboard() {
+  const toast = useToast();
   const [user, setUser] = useState<UserType | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; order: any | null; action: 'approve' | 'cancel' }>({ 
+    open: false, order: null, action: 'approve' 
+  });
+
+  const getToken = () => localStorage.getItem('token');
+
+  const fetchDashboard = async () => {
+    try {
+      const [userData, ordersResponse, dashboardResponse] = await Promise.all([
+        apiProxy.getMe(),
+        apiProxy.getOrders({ page: 1, per_page: 20 }),
+        apiProxy.getAdminDashboard()
+      ]);
+      setUser(userData);
+      setOrders(ordersResponse.data);
+      setDashboardData(dashboardResponse);
+      
+      // Fetch pending orders
+      const pendingRes = await fetch(`${API_BASE}/orders/v2?status=Pending&per_page=10`, {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      const pendingData = await pendingRes.json();
+      setPendingOrders(pendingData.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [userData, ordersResponse, dashboardResponse] = await Promise.all([
-          apiProxy.getMe(),
-          apiProxy.getOrders({ page: 1, per_page: 20 }),
-          apiProxy.getAdminDashboard()
-        ]);
-        setUser(userData);
-        setOrders(ordersResponse.data);
-        setDashboardData(dashboardResponse);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    fetchDashboard();
   }, []);
+
+  const handleApprove = async (order: any) => {
+    setActionLoading(order.id);
+    try {
+      const res = await fetch(`${API_BASE}/orders/v2/${order.id}/approve`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (!res.ok) throw new Error('Failed to approve');
+      toast.success(`Order ${order.id} approved`);
+      fetchDashboard();
+    } catch (err) {
+      toast.error('Failed to approve order');
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog({ open: false, order: null, action: 'approve' });
+    }
+  };
+
+  const handleCancel = async (order: any) => {
+    setActionLoading(order.id);
+    try {
+      const res = await fetch(`${API_BASE}/orders/v2/${order.id}/cancel`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      if (!res.ok) throw new Error('Failed to cancel');
+      toast.success(`Order ${order.id} cancelled`);
+      fetchDashboard();
+    } catch (err) {
+      toast.error('Failed to cancel order');
+    } finally {
+      setActionLoading(null);
+      setConfirmDialog({ open: false, order: null, action: 'cancel' });
+    }
+  };
 
   const summary = useMemo(() => {
     const pendingApproval = orders.filter((order) => ["created", "pending"].includes(order.status.toLowerCase())).length;
@@ -155,6 +217,100 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {/* Pending Orders Section - Full Width */}
+      {pendingOrders.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-testid="pending-orders-section">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-amber-50">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-600" />
+              <h2 className="font-semibold text-slate-900">Pending Orders - Action Required</h2>
+            </div>
+            <Link to="/orders?status=Pending" className="text-sm text-primary font-medium hover:underline">
+              View All →
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Order ID</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Items</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Amount</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pendingOrders.slice(0, 5).map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <Link to={`/orders`} className="font-medium text-primary hover:underline">{order.id}</Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-900">{order.customerName}</p>
+                      <p className="text-xs text-slate-500">Tier {order.pricing_tier}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${
+                        order.order_type === 'Plywood' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {order.order_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm">
+                        {order.items?.slice(0, 2).map((item: any, i: number) => (
+                          <p key={i} className="text-slate-600 truncate max-w-[200px]">
+                            {item.product_name} - {item.thickness}mm × {item.quantity}
+                          </p>
+                        ))}
+                        {order.items?.length > 2 && (
+                          <p className="text-xs text-slate-400">+{order.items.length - 2} more</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <p className="font-bold text-slate-900">₹{Number(order.grand_total || 0).toLocaleString()}</p>
+                      {order.order_type === 'Plywood' && (
+                        <p className="text-xs text-orange-600">Estimated</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Link
+                          to={`/orders`}
+                          className="p-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                          title="Edit Order"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => setConfirmDialog({ open: true, order, action: 'approve' })}
+                          disabled={actionLoading === order.id}
+                          className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                          title="Approve Order"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setConfirmDialog({ open: true, order, action: 'cancel' })}
+                          disabled={actionLoading === order.id}
+                          className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50"
+                          title="Cancel Order"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -307,6 +463,50 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog.open && confirmDialog.order && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              {confirmDialog.action === 'approve' ? 'Approve Order' : 'Cancel Order'}
+            </h3>
+            <p className="text-slate-600 mb-4">
+              {confirmDialog.action === 'approve' 
+                ? `Are you sure you want to approve order ${confirmDialog.order.id}?`
+                : `Are you sure you want to cancel order ${confirmDialog.order.id}? This action cannot be undone.`
+              }
+            </p>
+            <div className="bg-slate-50 rounded-xl p-3 mb-4">
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">Customer:</span> {confirmDialog.order.customerName}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">Amount:</span> ₹{Number(confirmDialog.order.grand_total || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDialog({ open: false, order: null, action: 'approve' })}
+                className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => confirmDialog.action === 'approve' ? handleApprove(confirmDialog.order) : handleCancel(confirmDialog.order)}
+                disabled={actionLoading === confirmDialog.order.id}
+                className={`flex-1 py-2.5 font-semibold rounded-xl disabled:opacity-50 ${
+                  confirmDialog.action === 'approve'
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'bg-red-600 text-white hover:bg-red-700'
+                }`}
+              >
+                {actionLoading === confirmDialog.order.id ? 'Processing...' : (confirmDialog.action === 'approve' ? 'Approve' : 'Cancel Order')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
