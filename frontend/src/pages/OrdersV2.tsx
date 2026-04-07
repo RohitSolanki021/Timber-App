@@ -377,17 +377,26 @@ export default function OrdersV2() {
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <span className="text-slate-900 font-medium">{order.total_quantity}</span>
+                        <span className="text-slate-900 font-medium">{order.items?.length || 0}</span>
                         <span className="text-xs text-slate-400 ml-1">items</span>
+                        <span className="mx-2 text-slate-300">•</span>
+                        <span className="text-slate-600">{order.total_quantity} qty</span>
                         {order.items && order.items.length > 0 && (
-                          <p className="text-xs text-slate-500 mt-1 truncate max-w-[200px]">
-                            {order.items.slice(0, 2).map((item, i) => (
-                              <span key={i}>
-                                {i > 0 ? ', ' : ''}{item.product_name} {item.thickness}mm
-                              </span>
+                          <div className="mt-2 space-y-1">
+                            {order.items.slice(0, 3).map((item, i) => (
+                              <div key={i} className="text-xs bg-slate-50 px-2 py-1 rounded flex justify-between items-center">
+                                <span className="text-slate-700 font-medium truncate max-w-[150px]">
+                                  {item.product_name}
+                                </span>
+                                <span className="text-slate-500 ml-2 whitespace-nowrap">
+                                  {item.thickness}mm • {item.size} • {item.quantity}pcs
+                                </span>
+                              </div>
                             ))}
-                            {order.items.length > 2 && <span className="text-slate-400"> +{order.items.length - 2} more</span>}
-                          </p>
+                            {order.items.length > 3 && (
+                              <p className="text-xs text-primary font-medium">+{order.items.length - 3} more items</p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </td>
@@ -704,9 +713,7 @@ export default function OrdersV2() {
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl">
                   <p className="text-xs text-slate-500 uppercase">Status</p>
-                  <p className="font-semibold text-slate-900">
-                    {selectedOrder.status === 'Pending' ? 'Order Placed' : selectedOrder.status}
-                  </p>
+                  <p className="font-semibold text-slate-900">{selectedOrder.status}</p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded-xl">
                   <p className="text-xs text-slate-500 uppercase">Pricing Tier</p>
