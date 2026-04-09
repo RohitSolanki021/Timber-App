@@ -3,10 +3,10 @@
  * Natural Plylam B2B API - Main Router
  */
 
-require_once __DIR__ . '/config/config.php';
-require_once __DIR__ . '/config/database.php';
-require_once __DIR__ . '/middleware/auth.php';
-require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../helpers.php';
 
 // Get request info
 $requestUri = $_SERVER['REQUEST_URI'];
