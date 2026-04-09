@@ -6,7 +6,7 @@ from datetime import datetime
 
 class CustomerCRUDTester:
     def __init__(self):
-        self.base_url = "https://7cc857b1-bccb-4094-be05-21237c0824fe.preview.emergentagent.com/api"
+        self.base_url = "https://source-puller-9.preview.emergentagent.com/api"
         self.token = None
         self.tests_run = 0
         self.tests_passed = 0

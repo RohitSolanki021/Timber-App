@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 class AdminPanelAPITester:
-    def __init__(self, base_url="https://7cc857b1-bccb-4094-be05-21237c0824fe.preview.emergentagent.com/api"):
+    def __init__(self, base_url="https://source-puller-9.preview.emergentagent.com/api"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0

@@ -15,7 +15,7 @@ import requests
 import os
 import io
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://admin-panel-refactor-7.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://source-puller-9.preview.emergentagent.com')
 if BASE_URL.endswith('/'):
     BASE_URL = BASE_URL[:-1]
 
