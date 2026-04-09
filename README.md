@@ -1,26 +1,75 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Natural Plylam B2B Ordering System
 
-# Run and deploy your AI Studio app
+A complete B2B ordering system for Plywood and Timber products with Admin, Sales, and Customer portals.
 
-This contains everything you need to run your app locally.
+## Project Structure
 
-View your app in AI Studio: https://ai.studio/apps/d650c53b-91a4-43e1-a5f9-f316133ab6a6
+```
+├── backend/           # FastAPI Python Backend
+│   ├── server.py      # Main API server
+│   ├── requirements.txt
+│   ├── .env.example   # Environment template
+│   ├── start_server.bat   # Windows batch script
+│   └── start_server.ps1   # PowerShell script
+│
+├── frontend/          # Admin Portal (React + Vite)
+├── customer-portal/   # Customer Portal (React + Vite)
+├── sales-portal/      # Sales Portal (React + Vite)
+└── DEPLOYMENT_GUIDE.md
+```
 
-## Run Locally
+## Quick Start (Windows)
 
-**Prerequisites:**  Node.js
+### Backend
+1. Open Command Prompt or PowerShell
+2. Navigate to `backend` folder
+3. Run `start_server.bat` or `.\start_server.ps1`
+4. Update `.env` with your MongoDB connection string
 
+### Frontend
+1. Open Command Prompt in each frontend folder
+2. Run `npm install`
+3. Run `npm run dev` (development) or `npm run build` (production)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Requirements
 
-## Mobile App Store Deployment
+- Python 3.10+
+- Node.js 18+
+- MongoDB (local or Atlas)
 
-For Android (Google Play) and iOS (Apple App Store) packaging/signing/release steps, see:
+## Default Credentials
 
-- [Mobile Deployment Guide](docs/mobile-store-deployment.md)
+- **Admin**: admin@naturalplylam.com / admin123
+- **Sales**: sales@naturalplylam.com / sales123
+- **Customer**: customer1@example.com / customer123
+
+## Features
+
+### Admin Portal
+- Dashboard with pending orders (Plywood/Timber split)
+- Order management (Edit, Approve, Cancel)
+- Product management with image upload
+- Customer management with tier pricing
+- Invoice management
+- Banner management
+- Staff management
+
+### Sales Portal
+- Customer-specific ordering
+- Order history per customer
+- Invoice viewing and sharing (WhatsApp)
+- Dashboard with sales metrics
+
+### Customer Portal
+- Fast ordering system
+- Product catalog with pricing
+- Order tracking
+- Invoice viewing
+
+## API Documentation
+
+Start the backend and visit: `http://localhost:8001/docs`
+
+## Support
+
+For deployment assistance, refer to `DEPLOYMENT_GUIDE.md`

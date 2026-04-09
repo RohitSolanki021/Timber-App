@@ -15,6 +15,13 @@ import json
 import base64
 import io
 
+# Load .env file for local development (Windows compatible)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not required in production
+
 app = FastAPI(title="Natural Plylam Admin API")
 
 app.add_middleware(
@@ -2946,8 +2953,7 @@ async def get_sales_dashboard(payload: dict = Depends(verify_token)):
     pending_orders = db.orders_v2.count_documents({**order_query, "status": "Pending"})
     
     # Calculate monthly sales (orders from this month)
-    from datetime import datetime, timedelta
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     monthly_orders = list(db.orders_v2.find({
         **order_query,
