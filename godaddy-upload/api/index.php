@@ -1,12 +1,13 @@
 <?php
 /**
- * Natural Plylam B2B API - Main Router (GoDaddy Ready)
+ * Natural Plylam B2B API - Main Router (MySQL Version)
+ * Complete PHP + MySQL implementation
  */
 
-require_once __DIR__ . '/config/config.php';
-require_once __DIR__ . '/config/database.php';
-require_once __DIR__ . '/middleware/auth.php';
-require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../helpers.php';
 
 // Get request info
 $requestUri = $_SERVER['REQUEST_URI'];
@@ -292,6 +293,7 @@ $routes['GET']['/products-v2'] = function() {
     
     $products = db()->fetchAll("SELECT * FROM products WHERE {$where} ORDER BY name", $whereParams);
     
+    // Add related data to each product
     foreach ($products as &$product) {
         $product['thicknesses'] = getProductThicknesses($product['id']);
         $product['sizes'] = getProductSizes($product['id']);
@@ -339,6 +341,7 @@ $routes['POST']['/admin/products-v2'] = function() {
     
     $productId = generateId(substr($data['group'] ?? 'PRD', 0, 3));
     
+    // Insert product
     db()->insert('products', [
         'id' => $productId,
         'name' => $data['name'] ?? '',
@@ -351,17 +354,22 @@ $routes['POST']['/admin/products-v2'] = function() {
         'updated_at' => getCurrentTimestamp()
     ]);
     
+    // Insert variants if provided
     if (!empty($data['variants'])) {
         foreach ($data['variants'] as $variant) {
+            // Insert thickness
             db()->query(
                 "INSERT IGNORE INTO product_thicknesses (product_id, thickness) VALUES (?, ?)",
                 [$productId, $variant['thickness']]
             );
+            
+            // Insert size
             db()->query(
                 "INSERT IGNORE INTO product_sizes (product_id, size) VALUES (?, ?)",
                 [$productId, $variant['size']]
             );
             
+            // Insert stock
             $stockKey = normalizeStockKey($productId, $variant['thickness'], $variant['size']);
             db()->insert('stock', [
                 'stock_key' => $stockKey,
@@ -374,9 +382,22 @@ $routes['POST']['/admin/products-v2'] = function() {
                 'reserved' => 0,
                 'updated_at' => getCurrentTimestamp()
             ]);
+            
+            // Insert variant pricing
+            if (!empty($variant['prices'])) {
+                $stockId = db()->getConnection()->lastInsertId();
+                foreach ($variant['prices'] as $tier => $price) {
+                    db()->insert('stock_pricing', [
+                        'stock_id' => $stockId,
+                        'tier' => (int)$tier,
+                        'price' => (float)$price
+                    ]);
+                }
+            }
         }
     }
     
+    // Insert tier pricing
     if (!empty($data['pricing_tiers'])) {
         foreach ($data['pricing_tiers'] as $tier => $price) {
             db()->insert('product_pricing', [
@@ -400,6 +421,7 @@ $routes['PUT']['/admin/products-v2/{id}'] = function($id) {
         errorResponse('Product not found', 404);
     }
     
+    // Update product
     $updateData = ['updated_at' => getCurrentTimestamp()];
     $allowedFields = ['name', 'description', 'base_price', 'price_unit', 'is_active'];
     foreach ($allowedFields as $field) {
@@ -413,7 +435,9 @@ $routes['PUT']['/admin/products-v2/{id}'] = function($id) {
     
     db()->update('products', $updateData, 'id = ?', [$id]);
     
+    // Update variants if provided
     if (!empty($data['variants'])) {
+        // Clear existing
         db()->delete('product_thicknesses', 'product_id = ?', [$id]);
         db()->delete('product_sizes', 'product_id = ?', [$id]);
         db()->delete('stock', 'product_id = ?', [$id]);
@@ -443,6 +467,7 @@ $routes['PUT']['/admin/products-v2/{id}'] = function($id) {
         }
     }
     
+    // Update pricing tiers
     if (!empty($data['pricing_tiers'])) {
         db()->delete('product_pricing', 'product_id = ?', [$id]);
         foreach ($data['pricing_tiers'] as $tier => $price) {
@@ -474,7 +499,7 @@ $routes['POST']['/admin/products-v2/{id}/image'] = function($id) {
     $allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     
     if (!in_array($file['type'], $allowedTypes)) {
-        errorResponse('Invalid file type', 400);
+        errorResponse('Invalid file type. Allowed: JPEG, PNG, WebP, GIF', 400);
     }
     
     if ($file['size'] > 5 * 1024 * 1024) {
@@ -499,7 +524,10 @@ $routes['POST']['/admin/products-v2/{id}/image'] = function($id) {
 $routes['DELETE']['/admin/products-v2/{id}/image/{index}'] = function($id, $index) {
     requireRole(['Super Admin', 'Admin']);
     
-    $images = db()->fetchAll("SELECT id FROM product_images WHERE product_id = ? ORDER BY id", [$id]);
+    $images = db()->fetchAll(
+        "SELECT id FROM product_images WHERE product_id = ? ORDER BY id",
+        [$id]
+    );
     
     if (!isset($images[$index])) {
         errorResponse('Invalid image index', 400);
@@ -593,7 +621,7 @@ $routes['GET']['/price/calculate'] = function() {
     ]);
 };
 
-// Include other route files
+// Continue in next file due to size...
 require_once __DIR__ . '/routes_orders.php';
 require_once __DIR__ . '/routes_customers.php';
 require_once __DIR__ . '/routes_invoices.php';
@@ -604,10 +632,12 @@ require_once __DIR__ . '/routes_sales.php';
 function matchRoute($method, $path) {
     global $routes;
     
+    // Exact match first
     if (isset($routes[$method][$path])) {
         return ['handler' => $routes[$method][$path], 'params' => []];
     }
     
+    // Pattern matching for routes with parameters
     if (isset($routes[$method])) {
         foreach ($routes[$method] as $routePattern => $handler) {
             $pattern = preg_replace('/\{([^}]+)\}/', '([^/]+)', $routePattern);
@@ -623,6 +653,7 @@ function matchRoute($method, $path) {
     return null;
 }
 
+// Route the request
 $match = matchRoute($requestMethod, $path);
 
 if ($match) {
