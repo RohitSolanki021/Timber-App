@@ -8,7 +8,9 @@ const API_BASE = (() => {
   if (configured) {
     return configured.endsWith('/') ? configured.slice(0, -1) : configured;
   }
-  return `${window.location.origin}/api`;
+  // Use pathname to support subdirectory deployments (e.g., Plesk preview)
+  const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
+  return `${window.location.origin}${basePath}/api`;
 })();
 
 let token: string | null = null;
