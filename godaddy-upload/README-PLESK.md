@@ -1,94 +1,114 @@
-# Plesk Deployment - Natural Plylam B2B
+# Plesk/IIS Deployment - Natural Plylam B2B
 
-## Your Domain
-`http://natural.eduglobal.co.in`
+## Your Server Uses IIS (Windows)
 
-## Quick Setup for Plesk
+Since your server runs IIS (not Apache), `.htaccess` won't work. You have two options:
 
-### Step 1: Create MySQL Database
-1. In Plesk, go to **Databases** → **Add Database**
-2. Note down:
-   - Database name: `plylam_b2b`
-   - Username
-   - Password
+---
 
-### Step 2: Import Database
-1. Click on your database → **phpMyAdmin**
-2. Click **Import** tab
-3. Upload `api/config/schema.sql`
-4. Click **Go**
+## Option 1: Direct PHP Access (Simplest - No Config Needed)
+
+Access the API directly via PHP files:
+
+```
+http://92.204.70.5/plesk-site-preview/natural.eduglobal.co.in/api/index.php/health
+http://92.204.70.5/plesk-site-preview/natural.eduglobal.co.in/api/index.php/login
+```
+
+The frontend needs to be updated to use this URL pattern.
+
+---
+
+## Option 2: Enable URL Rewrite in IIS (Recommended)
+
+1. In Plesk, go to your domain settings
+2. Look for **"URL Rewrite"** or **"Hosting Settings"**
+3. Upload the `web.config` file to your document root
+4. Make sure IIS URL Rewrite module is installed
+
+---
+
+## Database Setup (Required for Both Options)
+
+### Step 1: Create MySQL Database in Plesk
+1. Go to **Databases** → **Add Database**
+2. Create database: `plylam_b2b`
+3. Create user with password
+4. Note your credentials
+
+### Step 2: Import Schema
+1. Open **phpMyAdmin**
+2. Select your database
+3. Click **Import**
+4. Upload `api/config/schema.sql`
 
 ### Step 3: Configure API
-Edit `api/config/config.php` and update these lines:
+Edit `api/config/config.php`:
 
 ```php
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'your_database_name');  // e.g., plylam_b2b
-define('DB_USER', 'your_db_username');
-define('DB_PASS', 'your_db_password');
-define('JWT_SECRET', 'change_this_to_random_string');
+define('DB_NAME', 'your_database_name');
+define('DB_USER', 'your_username');  
+define('DB_PASS', 'your_password');
+define('JWT_SECRET', 'change_this_random_string');
 ```
 
-### Step 4: Upload Files
-Upload ALL contents of this folder to your domain's document root (httpdocs):
+---
+
+## Test the API
+
+After setup, test with:
 ```
-httpdocs/
-├── index.html
-├── assets/
-├── portal/
-├── sales/
-├── plylam.png
-├── .htaccess
-└── api/
-    ├── index.php
-    ├── routes_*.php
-    ├── config/
-    └── middleware/
+http://92.204.70.5/plesk-site-preview/natural.eduglobal.co.in/api/index.php/health
 ```
 
-### Step 5: Test
-1. Visit `http://natural.eduglobal.co.in/api/health`
-   - Should return: `{"status":"ok","database":"mysql"}`
-2. Visit `http://natural.eduglobal.co.in`
-   - Should show login page
+Should return:
+```json
+{"status":"ok","timestamp":"...","database":"mysql"}
+```
 
-### Login Credentials
+---
+
+## Login Credentials
+
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | admin@naturalplylam.com | admin123 |
-| Sales | sales@naturalplylam.com | sales123 |
-| Customer | customer1@example.com | customer123 |
+| **Super Admin** | admin@naturalplylam.com | admin123 |
+| **Manager** | manager@naturalplylam.com | manager123 |
+| **Sales Person** | sales@naturalplylam.com | sales123 |
+| **Customer** | customer1@example.com | customer123 |
 
-## Troubleshooting
+---
 
-### API returns 404
-- Check `.htaccess` was uploaded
-- In Plesk, ensure Apache is set (not Nginx only)
-- Go to **Apache & nginx Settings** → enable "Additional directives" or "Proxy mode"
+## File Structure
 
-### API returns 500 error
-- Check database credentials in `api/config/config.php`
-- Check PHP error logs in Plesk
-
-### React pages show 404 on refresh
-- Make sure `.htaccess` is in document root
-- Enable mod_rewrite in Apache
-
-## File Structure After Upload
 ```
 httpdocs/
 ├── index.html          ← Admin Portal
-├── assets/             ← CSS/JS
-├── portal/             ← Customer Portal  
+├── web.config          ← IIS routing rules
+├── assets/
+├── portal/             ← Customer Portal
 ├── sales/              ← Sales Portal
-├── plylam.png          ← Logo
-├── .htaccess           ← Routing rules
-└── api/                ← PHP Backend
-    ├── index.php       ← Main API router
+└── api/
+    ├── index.php       ← Main API (access directly)
     ├── config/
-    │   ├── config.php  ← DATABASE CREDENTIALS HERE
-    │   ├── database.php
-    │   └── schema.sql  ← Import this first
+    │   ├── config.php  ← UPDATE DATABASE CREDENTIALS
+    │   └── schema.sql  ← Import to MySQL
     └── middleware/
-        └── auth.php
 ```
+
+---
+
+## Troubleshooting
+
+### "404 Not Found"
+- Try accessing `api/index.php/health` directly
+- Check if PHP is enabled in Plesk
+
+### "500 Internal Server Error"  
+- Check database credentials in `api/config/config.php`
+- Check PHP error logs in Plesk
+
+### Database connection failed
+- Verify MySQL credentials
+- Check if database exists and schema was imported

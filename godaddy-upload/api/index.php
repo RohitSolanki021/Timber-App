@@ -4,20 +4,26 @@
  * Complete PHP + MySQL implementation
  */
 
-require_once __DIR__ . '/../config/config.php';
-require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../middleware/auth.php';
-require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/config/config.php';
+require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/middleware/auth.php';
+require_once __DIR__ . '/helpers.php';
 
 // Get request info
 $requestUri = $_SERVER['REQUEST_URI'];
 $requestMethod = $_SERVER['REQUEST_METHOD'];
 
-// Parse the path - remove /api prefix and query string
+// Parse the path - handle various URL structures including Plesk preview
 $path = parse_url($requestUri, PHP_URL_PATH);
-$path = preg_replace('/^\/api/', '', $path);
+
+// Remove common prefixes
+$path = preg_replace('/^.*\/api/', '', $path);  // Remove everything before /api including /api
+$path = preg_replace('/^\/index\.php/', '', $path);  // Remove index.php if present
 $path = rtrim($path, '/');
 if (empty($path)) $path = '/';
+
+// Debug logging (remove in production)
+// error_log("Request URI: $requestUri, Parsed Path: $path");
 
 // Route handlers
 $routes = [];

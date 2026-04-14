@@ -9,8 +9,9 @@ const API_BASE = (() => {
     return configured.endsWith('/') ? configured.slice(0, -1) : configured;
   }
   // Use pathname to support subdirectory deployments (e.g., Plesk preview)
+  // For IIS servers, use /api/index.php path pattern
   const basePath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
-  return `${window.location.origin}${basePath}/api`;
+  return `${window.location.origin}${basePath}/api/index.php`;
 })();
 
 let token: string | null = null;
