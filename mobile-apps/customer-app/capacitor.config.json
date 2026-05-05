@@ -1,6 +1,6 @@
 {
   "appId": "com.naturalplylam.customer",
-  "appName": "Plylam Customer",
+  "appName": "Natural Plylam",
   "webDir": "dist",
   "server": {
     "androidScheme": "https",
@@ -10,7 +10,10 @@
     "SplashScreen": {
       "launchShowDuration": 2000,
       "backgroundColor": "#10b981",
-      "showSpinner": false
+      "showSpinner": false,
+      "androidSplashResourceName": "splash",
+      "splashFullScreen": true,
+      "splashImmersive": true
     },
     "StatusBar": {
       "style": "dark",
@@ -18,6 +21,10 @@
     }
   },
   "android": {
-    "allowMixedContent": true
+    "allowMixedContent": true,
+    "backgroundColor": "#ffffff"
+  },
+  "ios": {
+    "backgroundColor": "#ffffff"
   }
 }
