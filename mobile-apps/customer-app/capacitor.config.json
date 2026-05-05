@@ -11,6 +11,10 @@
       "launchShowDuration": 2000,
       "backgroundColor": "#7c3aed",
       "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "light",
+      "backgroundColor": "#7c3aed"
     }
   },
   "android": {
