@@ -1,0 +1,19 @@
+{
+  "appId": "com.naturalplylam.sales",
+  "appName": "Plylam Sales",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["app.naturalplylam.com"]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#059669",
+      "showSpinner": false
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
