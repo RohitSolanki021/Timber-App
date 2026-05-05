@@ -1,0 +1,23 @@
+{
+  "appId": "com.naturalplylam.admin",
+  "appName": "Plylam Admin",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": ["app.naturalplylam.com"]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#1a365d",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#1a365d"
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
