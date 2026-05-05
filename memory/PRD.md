@@ -19,6 +19,17 @@ Extract and convert the Timber-App repository from Python/MongoDB to PHP/MySQL w
 
 ## Implementation Status
 
+### Completed (Feb 2026)
+
+#### Customer Mobile App — Real Capacitor Wrapper ✅ (Feb 5, 2026)
+- [x] Replaced the previous "fake" Customer App (which was a re-skinned Sales app) with a Capacitor wrapper around the **genuine compiled Customer Portal bundle** (`/app/frontend/public/portal/`).
+- [x] UI is now pixel-identical to the original web preview (verified via screenshot — Welcome card, NP logo, blue Sign In / Sign Up buttons render correctly).
+- [x] `dist/portal/config.js` exposes a single editable `API_BASE_URL` to point the app at any PHP backend.
+- [x] `dist/portal/api-shim.js` intercepts `fetch` / XHR and rewrites the legacy hard-coded URLs (`http://localhost:8001/api`, `https://source-puller-9.preview.emergentagent.com/api`, `http://localhost/natural`) to the configured base — no source rebuild needed.
+- [x] Native Android project generated via `npx cap add android` (appId `com.naturalplylam.customer`).
+- [x] Re-packaged final bundles: `customer-app-complete.zip` (4.3 MB) and `mobile-apps-bundle.zip` (18 MB, all 3 apps).
+- [x] Per-app and bundle-level READMEs with Android Studio + Xcode build steps.
+
 ### Completed (January 2026)
 
 #### PHP + MySQL Backend Conversion ✅

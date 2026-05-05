@@ -1,150 +1,121 @@
-# Natural Plylam - Sales Portal
+# Natural Plylam — Customer Mobile App
 
-A mobile-first sales portal for Natural Plylam sales representatives to manage customers and create orders.
+Capacitor wrapper for the official Customer Portal. The mobile app loads
+the **exact same UI** that runs on the web preview (pixel-identical),
+and routes all API traffic to your PHP/MySQL backend.
 
-## Features
+---
 
-- **Dashboard** - View monthly sales, customer count, pending orders, and outstanding balances
-- **Customer Management** - View assigned customers, add new customers, filter by approval status
-- **Product Catalog** - Browse products with tier-based pricing per customer
-- **Cart & Checkout** - Create orders for customers with credit-based payment
-- **Orders** - Track order history and status
-- **Invoices** - View customer invoices
+## 1. Configure the backend URL
 
-## Tech Stack
-
-- **Frontend**: React 18 + TypeScript + Vite
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
-- **Animations**: Motion (Framer Motion)
-- **Routing**: React Router v6
-
-## Prerequisites
-
-- Node.js 18+
-- Yarn or npm
-- Backend API running (see Backend Setup below)
-
-## Quick Start
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/rahulasolanki-rgb/Sales-Plylam.git
-   cd Sales-Plylam
-   ```
-
-2. **Install dependencies**
-   ```bash
-   yarn install
-   # or
-   npm install
-   ```
-
-3. **Configure environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env and set your backend API URL
-   ```
-
-4. **Start development server**
-   ```bash
-   yarn dev
-   # or
-   npm run dev
-   ```
-
-5. **Open in browser**
-   ```
-   http://localhost:3000
-   ```
-
-## Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `VITE_API_BASE_URL` | Backend API URL | `http://localhost:8001/api` |
-
-## Scripts
-
-| Command | Description |
-|---------|-------------|
-| `yarn dev` | Start development server on port 3000 |
-| `yarn build` | Build for production |
-| `yarn preview` | Preview production build |
-| `yarn lint` | Run TypeScript type checking |
-
-## Backend API Requirements
-
-This frontend requires a backend API with the following endpoints:
-
-### Authentication
-- `POST /api/login` - Login with email, password, and app_role="Sales Person"
-- `POST /api/logout` - Logout
-- `GET /api/me` - Get current user profile
-
-### Dashboard
-- `GET /api/sales/dashboard` - Get sales metrics
-
-### Customers
-- `GET /api/sales/customers` - List assigned customers (with search, status filters)
-- `GET /api/sales/customers/:id` - Get customer details
-- `POST /api/sales/customers` - Create new customer
-
-### Products
-- `GET /api/products` - List all products (with search, category filters)
-
-### Cart
-- `GET /api/sales/cart?customer_id=` - Get cart for customer
-- `POST /api/sales/cart` - Add/update cart item
-- `DELETE /api/sales/cart` - Remove item or clear cart
-
-### Orders
-- `POST /api/sales/checkout` - Create order from cart
-- `GET /api/sales/orders` - List orders (with status filter)
-- `GET /api/sales/orders/:id` - Get order details
-
-### Invoices
-- `GET /api/sales/invoices` - List invoices (with status filter)
-
-## Demo Credentials
-
-| Role | Email | Password |
-|------|-------|----------|
-| Sales Person | sales@naturalplylam.com | sales123 |
-
-## Project Structure
+Open this file in any text editor:
 
 ```
-src/
-├── components/
-│   └── Layout.tsx          # Main layout with bottom navigation
-├── context/
-│   └── CartContext.tsx     # Cart state management
-├── pages/
-│   ├── Login.tsx           # Login page
-│   ├── Dashboard.tsx       # Home dashboard
-│   ├── Customers.tsx       # Customer list
-│   ├── AddCustomer.tsx     # Add new customer form
-│   ├── Products.tsx        # Product catalog
-│   ├── Cart.tsx            # Shopping cart
-│   ├── Checkout.tsx        # Order checkout
-│   ├── Orders.tsx          # Order history
-│   ├── OrderDetail.tsx     # Order details
-│   ├── Invoices.tsx        # Invoice list
-│   └── Profile.tsx         # User profile
-├── apiService.ts           # API client
-├── App.tsx                 # Routes and providers
-└── index.css               # Global styles
+dist/portal/config.js
 ```
 
-## Building for Production
+Change `API_BASE_URL` to your live PHP backend (must end in `/api`):
+
+```js
+window.NATURAL_PLYLAM_CONFIG = {
+  API_BASE_URL: "https://yourdomain.com/api"
+};
+```
+
+That's the only file you need to edit.
+
+---
+
+## 2. Build the Android APK (Android Studio)
+
+Prerequisites: Node 18+, Java 17, Android Studio (Hedgehog or later).
 
 ```bash
-yarn build
+# from this folder
+yarn install
+npx cap sync android
+npx cap open android        # opens Android Studio
 ```
 
-The built files will be in the `dist/` directory, ready to be deployed to any static hosting service.
+Inside Android Studio:
+1. Wait for Gradle sync to finish.
+2. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+3. The signed-debug APK will be at:
+   `android/app/build/outputs/apk/debug/app-debug.apk`
 
-## License
+For a release / Play Store build:
+```bash
+cd android
+./gradlew assembleRelease
+# output: android/app/build/outputs/apk/release/app-release-unsigned.apk
+```
+Then sign with your keystore (`apksigner` / Android Studio `Generate Signed Bundle / APK`).
 
-Private - Natural Plylam
+---
+
+## 3. Build the iOS IPA (Xcode, macOS only)
+
+```bash
+yarn install
+npx cap add ios            # first time only
+npx cap sync ios
+npx cap open ios           # opens Xcode
+```
+
+Inside Xcode:
+1. Select your team in **Signing & Capabilities**.
+2. Choose a real device or "Any iOS Device" target.
+3. **Product → Archive** → **Distribute App**.
+
+---
+
+## 4. Updating the app after backend URL changes
+
+```bash
+# edit dist/portal/config.js, then:
+npx cap sync
+# rebuild from Android Studio / Xcode
+```
+
+No code changes, no rebuild of the React bundle required.
+
+---
+
+## Project layout
+
+```
+customer-app/
+├── capacitor.config.json     # Capacitor config (appId, splash, status bar)
+├── package.json              # Capacitor deps + scripts
+├── dist/                     # Web assets that ship inside the app
+│   ├── index.html            # bootstrap → redirects to /portal/
+│   ├── plylam.png            # logo
+│   └── portal/               # the official Customer Portal bundle
+│       ├── index.html
+│       ├── config.js         # ← EDIT THIS to set API_BASE_URL
+│       ├── api-shim.js       # rewrites legacy URLs → API_BASE_URL
+│       └── assets/...
+└── android/                  # generated native Android project
+```
+
+---
+
+## How the API routing works
+
+The Customer Portal bundle has legacy dev URLs (`http://localhost:8001/api`,
+the old preview URL) baked in. A tiny script (`api-shim.js`) loads
+**before** the bundle and intercepts every `fetch` / `XMLHttpRequest`,
+rewriting those legacy bases to `API_BASE_URL` from `config.js`.
+
+Result: the UI is unchanged, but every request goes to your PHP backend.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| White screen on launch | Make sure `dist/portal/index.html` exists in the APK (`npx cap sync`). |
+| API calls failing | Open Chrome DevTools (`chrome://inspect`) on the WebView and check `[plylam] API requests routed to:` in the console. |
+| CORS errors | Add `Access-Control-Allow-Origin: *` (or your app origin) on the PHP backend. |
+| Splash colour wrong | Edit `capacitor.config.json` → `plugins.SplashScreen.backgroundColor`. |
